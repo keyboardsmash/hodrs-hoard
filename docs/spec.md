@@ -76,8 +76,7 @@ Based on PHP4DVD's three permission levels (`legacy/includes/users.inc.php`).
 - An admin cannot delete their own account.
 - Items are not owned by users, so deleting a user does not affect the
   catalogue.
-- **Decided:** "disabled" flag that keeps history (who added
-  or edited what)? 
+- Users should only be disable. Flag that keeps history (who added or edited what).
 
 ### 2.4 Authentication
 
@@ -90,9 +89,7 @@ Based on PHP4DVD's three permission levels (`legacy/includes/users.inc.php`).
 ### 2.5 Importing PHP4DVD users
 
 - PHP4DVD stores unsalted MD5 password hashes, which must not be reused.
-- **Decided:** import users with a forced password reset, or skip users and
-  only import the catalogue? (Suggested: import username, email and role,
-  and require a new password on first login.)
+- import username, email and role, and require a new password on first login.
 
 ---
 
