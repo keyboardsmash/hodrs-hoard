@@ -1,0 +1,46 @@
+# Dev environment for Höðrs Hoard. Lives in dev/, mounts the repo root.
+# Personal values (UID, git identity) come from dev/.env (not committed).
+#
+# Usage (from the repo root):
+#   podman compose -f dev/compose.yaml up -d db
+#   podman compose -f dev/compose.yaml run --rm --service-ports dev
+#   claude                                        # inside the container
+
+services:
+  dev:
+    build:
+      context: .
+      dockerfile: Containerfile
+      args:
+        UID: ${HOST_UID:-1000}
+    userns_mode: keep-id     # Podman rootless only. Remove this line for Docker.
+    volumes:
+      - ../:/workspace:Z     # the repo root, and nothing else from the host
+      - claude-config:/home/dev/.claude-config
+      - go-modcache:/go/pkg/mod
+    environment:
+      DATABASE_URL: postgres://hodrs-hoard:hodrs-hoard@db:5432/hodrs_hoard?sslmode=disable
+      GIT_AUTHOR_NAME: ${GIT_NAME}
+      GIT_AUTHOR_EMAIL: ${GIT_EMAIL}
+      GIT_COMMITTER_NAME: ${GIT_NAME}
+      GIT_COMMITTER_EMAIL: ${GIT_EMAIL}
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      - db
+    stdin_open: true
+    tty: true
+
+  db:
+    image: docker.io/library/postgres:17
+    environment:
+      POSTGRES_USER: hodrs-hoard
+      POSTGRES_PASSWORD: hodrs-hoard
+      POSTGRES_DB: hodrs_hoard
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  claude-config:
+  go-modcache:
+  pgdata:

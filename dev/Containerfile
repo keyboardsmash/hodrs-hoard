@@ -1,0 +1,30 @@
+# Dev container for the media catalogue project.
+# Contains: Go toolchain, git, ripgrep, DB clients and Claude Code.
+# Only the project folder is mounted in; nothing else from the host is visible.
+
+# Pin to the current Go release (check https://go.dev/dl/) and bump when needed.
+FROM docker.io/library/golang:1.26-trixie
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      git ripgrep curl ca-certificates less \
+      sqlite3 postgresql-client \
+ && rm -rf /var/lib/apt/lists/*
+
+# Non-root user. UID should match your host user (check with `id -u`)
+# so files Claude creates in the repo are owned by you.
+ARG UID=1000
+RUN useradd -m -u ${UID} -s /bin/bash dev
+
+USER dev
+ENV HOME=/home/dev \
+    PATH=/home/dev/.local/bin:/go/bin:/usr/local/go/bin:$PATH \
+    # Keep all Claude Code state (login, settings) in one directory,
+    # which compose.yaml puts on a named volume so it survives rebuilds.
+    CLAUDE_CONFIG_DIR=/home/dev/.claude-config
+
+# Native Claude Code install (no Node.js needed)
+RUN curl -fsSL https://claude.ai/install.sh | bash
+
+WORKDIR /workspace
+CMD ["bash"]
