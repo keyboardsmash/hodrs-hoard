@@ -55,6 +55,8 @@ Based on PHP4DVD's three permission levels (`legacy/includes/users.inc.php`).
 | role          | yes      | viewer / editor / admin                       |
 | created_at    | auto     |                                               |
 | last_login_at | auto     |                                               |
+| disabled_at   | auto     | Set when an admin disables the user (see 2.3) |
+| must_change_password | auto | Set for imported PHP4DVD users (see 2.5) |
 
 ### 2.3 Operations
 
@@ -70,13 +72,17 @@ Based on PHP4DVD's three permission levels (`legacy/includes/users.inc.php`).
   This matches PHP4DVD (`legacy/includes/user.update.inc.php`).
 - Admins can reset another user's password.
 
-#### Delete user
-- Only admins can delete users.
-- The last remaining admin cannot be deleted or demoted.
-- An admin cannot delete their own account.
-- Items are not owned by users, so deleting a user does not affect the
+#### Disable user
+- **Decided:** users are disabled, never deleted, so the history of who
+  added or edited what is kept.
+- Only admins can disable users, and they can enable them again.
+- A disabled user cannot log in, and their active sessions and "remember
+  me" tokens are revoked.
+- The username stays reserved while the user is disabled.
+- The last remaining active admin cannot be disabled or demoted.
+- An admin cannot disable their own account.
+- Items are not owned by users, so disabling a user does not affect the
   catalogue.
-- Users should only be disable. Flag that keeps history (who added or edited what).
 
 ### 2.4 Authentication
 
@@ -89,7 +95,8 @@ Based on PHP4DVD's three permission levels (`legacy/includes/users.inc.php`).
 ### 2.5 Importing PHP4DVD users
 
 - PHP4DVD stores unsalted MD5 password hashes, which must not be reused.
-- import username, email and role, and require a new password on first login.
+- **Decided:** import username, email and role, and require a new password
+  on first login.
 
 ---
 
@@ -137,6 +144,8 @@ Common fields (all kinds):
 | status         | active / hidden / trashed                   |
 | added_at       | auto                                        |
 | updated_at     | auto                                        |
+| added_by       | auto, user who created the item             |
+| updated_by     | auto, user who last edited the item         |
 | parent_id      | For box sets (see 3.4)                      |
 
 Video fields (DVD, VHS):
@@ -292,3 +301,9 @@ API keys come from configuration and are never committed.
 |------------|-------------------------------------------------------|
 | 2026-11-09 | Initial media types: DVD, VHS, Book, Ebook.           |
 | 2026-11-09 | Three user roles (viewer/editor/admin), as in PHP4DVD. |
+| 2026-11-09 | No self-registration; admins create users.            |
+| 2026-11-09 | Desktop mode skips login by default (implicit admin). |
+| 2026-11-09 | Optional read-only browsing for anonymous visitors.   |
+| 2026-11-09 | Keep PHP4DVD fields: own, seen, favourite, loans, trailer, MPAA rating. |
+| 2026-11-09 | Users are disabled, never deleted, to keep edit history. |
+| 2026-11-09 | PHP4DVD users imported with a forced password change. |
