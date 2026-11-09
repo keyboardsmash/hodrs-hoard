@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.AppName}}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 3rem auto; padding: 0 1rem; line-height: 1.5; }
+    dl { display: grid; grid-template-columns: max-content 1fr; gap: .25rem 1rem; }
+    dt { font-weight: 600; }
+    .ok { color: #15803d; }
+  </style>
+</head>
+<body>
+  <h1>{{.AppName}}</h1>
+  <p>Catalogue for physical and digital media. Nothing to browse yet.</p>
+  <h2>Status</h2>
+  <dl>
+    <dt>Health</dt><dd class="ok">{{.Health.Status}}</dd>
+    <dt>Version</dt><dd>{{.Health.Version}}</dd>
+    <dt>Uptime</dt><dd>{{.Health.Uptime}}</dd>
+  </dl>
+  <p><a href="/healthz">/healthz</a> (JSON)</p>
+</body>
+</html>

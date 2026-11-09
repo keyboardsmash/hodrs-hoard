@@ -251,6 +251,15 @@ API keys come from configuration and are never committed.
 ## 8. Configuration and deployment
 
 - Configuration from env vars, or a git-ignored config file.
+- Environment variables (added as milestones need them):
+
+  | Variable          | Default | Notes                                  |
+  |-------------------|---------|----------------------------------------|
+  | `HOARD_ADDR`      | `:8080` | Listen address, `host:port`            |
+  | `HOARD_LOG_LEVEL` | `info`  | `debug`, `info`, `warn` or `error`     |
+
+- `GET /healthz` returns JSON (`status`, `version`, `uptime`) for monitoring
+  and container health checks.
 - Database: SQLite (default) or PostgreSQL, using the same code.
 - Distribution: static binary (`hoard`), container image, AppImage. Wails v3
   desktop is the last milestone.
