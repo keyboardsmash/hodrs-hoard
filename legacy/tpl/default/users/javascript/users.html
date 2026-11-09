@@ -1,0 +1,22 @@
+<script>
+	$(document).ready(function() {
+		$.validator.messages["required"] = "<i class='fa fa-times-circle-o' aria-hidden='true'></i> {$smarty.const.VALIDATOR_REQUIRED|escape}";
+		$.validator.messages["email"] = "<i class='fa fa-times-circle-o' aria-hidden='true'></i> {$smarty.const.VALIDATOR_EMAIL|escape}";
+		$.validator.messages["equalTo"] = "<i class='fa fa-times-circle-o' aria-hidden='true'></i> {$smarty.const.VALIDATOR_EQUAL_TO|escape}";
+		$.validator.messages["username"] = "<i class='fa fa-times-circle-o' aria-hidden='true'></i> {$smarty.const.VALIDATOR_USERNAME|escape|nl2br|strip}";
+		$("#form").validate({
+			rules: {
+				username: {
+					username: true,
+					depends: function(e) {
+						{literal}e.value = e.value.replace(/\.{2,}/u,'.'){/literal}
+					}
+				},
+				password: "required",
+				password2: {
+					equalTo: "#password"
+				}
+			}
+		});
+	});
+</script>
