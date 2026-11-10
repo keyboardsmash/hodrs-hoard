@@ -228,3 +228,81 @@ func TestSessionDeleteOthers(t *testing.T) {
 		t.Errorf("other session: %v, want ErrNoSession", err)
 	}
 }
+
+// newRemember is newSessions for remember tokens.
+func newRemember(t *testing.T) (*RememberTokens, *time.Time) {
+	t.Helper()
+	s, clock := newSessions(t)
+	r := NewRememberTokens(s.db)
+	r.Now = s.Now // share the clock
+	return r, clock
+}
+
+func TestRememberSlidingExpiry(t *testing.T) {
+	ctx := context.Background()
+	r, clock := newRemember(t)
+	token, err := r.Create(ctx, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stored string
+	r.db.QueryRow(`SELECT token_hash FROM remember_tokens`).Scan(&stored)
+	if stored != hashToken(token) {
+		t.Error("database does not hold the token's hash")
+	}
+
+	// Used every 29 days for three months: still valid (sliding).
+	for i := 0; i < 3; i++ {
+		*clock = clock.Add(RememberLifetime - 24*time.Hour)
+		if id, err := r.Use(ctx, token); err != nil || id != 1 {
+			t.Fatalf("use %d: %d, %v", i, id, err)
+		}
+	}
+	// Then 30 days without use: gone.
+	*clock = clock.Add(RememberLifetime)
+	if _, err := r.Use(ctx, token); err != ErrNoRememberToken {
+		t.Errorf("after 30 idle days: %v, want ErrNoRememberToken", err)
+	}
+	var n int
+	r.db.QueryRow(`SELECT count(*) FROM remember_tokens`).Scan(&n)
+	if n != 0 {
+		t.Error("expired token not deleted")
+	}
+	if _, err := r.Use(ctx, ""); err != ErrNoRememberToken {
+		t.Errorf("empty token: %v", err)
+	}
+}
+
+func TestRememberDelete(t *testing.T) {
+	ctx := context.Background()
+	r, clock := newRemember(t)
+	a, _ := r.Create(ctx, 1)
+	b, _ := r.Create(ctx, 1)
+	c, _ := r.Create(ctx, 1)
+
+	r.Delete(ctx, a)
+	if _, err := r.Use(ctx, a); err != ErrNoRememberToken {
+		t.Errorf("after Delete: %v", err)
+	}
+	r.DeleteOthers(ctx, 1, b)
+	if _, err := r.Use(ctx, b); err != nil {
+		t.Errorf("kept token: %v", err)
+	}
+	if _, err := r.Use(ctx, c); err != ErrNoRememberToken {
+		t.Errorf("other token: %v", err)
+	}
+	r.DeleteForUser(ctx, 1)
+	if _, err := r.Use(ctx, b); err != ErrNoRememberToken {
+		t.Errorf("after DeleteForUser: %v", err)
+	}
+
+	r.Create(ctx, 1)
+	*clock = clock.Add(RememberLifetime)
+	fresh, _ := r.Create(ctx, 1)
+	if n, err := r.DeleteExpired(ctx); err != nil || n != 1 {
+		t.Errorf("DeleteExpired = %d, %v; want 1", n, err)
+	}
+	if _, err := r.Use(ctx, fresh); err != nil {
+		t.Errorf("fresh token removed: %v", err)
+	}
+}

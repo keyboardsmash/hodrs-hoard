@@ -59,12 +59,10 @@ func (s *Server) handlePassword(w http.ResponseWriter, r *http.Request) {
 		s.formError(w, r, err, "password.html", s.passwordPage(r))
 		return
 	}
-	// End the user's other sessions (a stolen session, say); keep this one.
-	if c, err := r.Cookie(sessionCookie); err == nil {
-		if err := s.sessions.DeleteOthers(r.Context(), u.ID, c.Value); err != nil {
-			s.serverError(w, r, err)
-			return
-		}
+	// End the user's other logins (a stolen session, say); keep this one.
+	if err := s.endOtherSessions(r, u.ID); err != nil {
+		s.serverError(w, r, err)
+		return
 	}
 	s.log.Info("password changed", "username", u.Username)
 	http.Redirect(w, r, "/account?msg=password", http.StatusSeeOther)

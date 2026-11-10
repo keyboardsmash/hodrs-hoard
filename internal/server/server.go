@@ -44,6 +44,7 @@ type Server struct {
 	db        *sql.DB
 	users     *user.Store
 	sessions  *auth.Sessions
+	remember  *auth.RememberTokens
 	settings  *settings.Store
 	templates map[string]*template.Template
 
@@ -79,6 +80,7 @@ func New(ctx context.Context, version string, log *slog.Logger, db *sql.DB) (*Se
 		db:        db,
 		users:     user.NewStore(db),
 		sessions:  auth.NewSessions(db),
+		remember:  auth.NewRememberTokens(db),
 		settings:  settings.NewStore(db),
 		templates: tmpl,
 	}
@@ -128,6 +130,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /account/email", viewer(s.handleAccountEmail))
 	mux.Handle("GET /account/password", viewer(s.handlePasswordForm))
 	mux.Handle("POST /account/password", viewer(s.handlePassword))
+	mux.Handle("POST /account/logout-everywhere", viewer(s.handleLogoutEverywhere))
 
 	// Admin pages. {id} is a wildcard; handlers read it with r.PathValue.
 	admin := func(h http.HandlerFunc) http.Handler { return s.requireRole(user.RoleAdmin, h) }
@@ -164,18 +167,26 @@ func (s *Server) Handler() http.Handler {
 	return s.logRequests(h)
 }
 
-// CleanupSessions deletes expired sessions now and then every hour, until
-// ctx is cancelled. main runs it in its own goroutine.
+// CleanupSessions deletes expired sessions and remember tokens now and then
+// every hour, until ctx is cancelled. main runs it in its own goroutine.
 func (s *Server) CleanupSessions(ctx context.Context) {
 	ticker := time.NewTicker(time.Hour)
 	defer ticker.Stop()
+	// A map from a name to a method value: s.sessions.DeleteExpired is a
+	// function already bound to s.sessions, so it can be called later.
+	cleanups := map[string]func(context.Context) (int64, error){
+		"sessions":        s.sessions.DeleteExpired,
+		"remember tokens": s.remember.DeleteExpired,
+	}
 	for {
-		if n, err := s.sessions.DeleteExpired(ctx); err != nil {
-			if ctx.Err() == nil { // errors during shutdown are expected
-				s.log.Error("deleting expired sessions", "err", err)
+		for what, cleanup := range cleanups {
+			if n, err := cleanup(ctx); err != nil {
+				if ctx.Err() == nil { // errors during shutdown are expected
+					s.log.Error("deleting expired "+what, "err", err)
+				}
+			} else if n > 0 {
+				s.log.Debug("deleted expired "+what, "count", n)
 			}
-		} else if n > 0 {
-			s.log.Debug("deleted expired sessions", "count", n)
 		}
 		select {
 		case <-ctx.Done():
@@ -265,6 +276,8 @@ var messages = map[string]string{
 	"password-reset": "Password reset. The user must choose a new one at next login.",
 	"disabled":       "User disabled. Their sessions have been ended.",
 	"enabled":        "User enabled.",
+
+	"logged-out-everywhere": "You have been logged out on all devices.",
 }
 
 // formValues are submitted values shown again after an error. Passwords are
@@ -275,6 +288,7 @@ type formValues struct {
 	Email    string
 	Role     user.Role
 	Next     string
+	Remember bool // the "Remember me" checkbox on the login form
 	// MustChange is the "must change password" checkbox on the new-user form.
 	MustChange bool
 }

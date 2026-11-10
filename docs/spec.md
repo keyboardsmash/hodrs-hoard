@@ -86,6 +86,8 @@ Based on PHP4DVD's three permission levels (`legacy/includes/users.inc.php`).
   every page except the password form and logout redirects to
   `/account/password`. The form asks for the current (temporary) password
   too, and the new one must differ from it.
+- Users can "Log out everywhere" on their account page, for example after
+  losing a device. It ends all their sessions and remember tokens.
 - **Later:** renaming users (admins changing a username).
 
 #### Disable user
@@ -130,7 +132,32 @@ Based on PHP4DVD's three permission levels (`legacy/includes/users.inc.php`).
 - A session ends after **12 hours without activity** or **7 days after
   login**, whichever comes first, or at logout. The cookie itself is a
   browser-session cookie; staying logged in across browser restarts is
-  "remember me" (milestone 2d). Expired sessions are cleaned up hourly.
+  "remember me" (below). Expired sessions are cleaned up hourly.
+- **Decided:** "Remember me" is a checkbox on the login form (unticked by
+  default). It sets a second cookie, `hoard_remember`, with its own token
+  in the `remember_tokens` table (stored as SHA-256, like sessions). When
+  a browser has no valid session but a valid remember token, a new session
+  is started without a password; the usual checks (disabled user, forced
+  password change) still apply.
+  - Lifetime: **30 days, sliding**. Each use moves the expiry 30 days
+    forward (cookie and database), so it only runs out after 30 days
+    without a visit.
+  - **Decided:** no token rotation. The token stays the same while it is
+    valid. Rotation only helps together with theft detection, and needs a
+    grace period so several tabs opening at once don't log the user out.
+    **Later:** rotation with theft detection, if needed.
+  - PHP4DVD split tokens into a selector and a validator. That isn't
+    needed for a 256-bit random token looked up by its SHA-256.
+- Logins end as follows (sessions and remember tokens alike):
+
+  | Event | Ends |
+  |-------|------|
+  | Logout | This browser's session and remember token |
+  | User changes own password | All the user's others; this browser stays logged in |
+  | "Log out everywhere" (`/account`) | All the user's, on every device |
+  | Admin resets password or disables user | All that user's |
+  | Expiry | Removed by the hourly cleanup |
+
 - Cookie flags: `HttpOnly`, `SameSite=Lax`, and `Secure` when the request
   came over HTTPS (directly, or via a proxy setting `X-Forwarded-Proto`).
 - Every login issues a new session token (no session fixation).
@@ -388,3 +415,5 @@ API keys come from configuration and are never committed.
 | 2026-11-10 | Forced password change asks for the current password too. |
 | 2026-11-10 | Renaming users deferred (Later). |
 | 2026-11-10 | Plain HTML forms for user pages; htmx arrives with milestone 3. |
+| 2026-11-10 | "Remember me": 30 days, sliding expiry, separate hashed token, no rotation. |
+| 2026-11-10 | "Log out everywhere" button on the account page. |

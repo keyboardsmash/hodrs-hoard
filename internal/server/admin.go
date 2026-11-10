@@ -146,7 +146,7 @@ func (s *Server) handleAdminUserPassword(w http.ResponseWriter, r *http.Request)
 		s.adminUserError(w, r, t, err)
 		return
 	}
-	if err := s.sessions.DeleteForUser(r.Context(), t.ID); err != nil {
+	if err := s.endAllSessions(r.Context(), t.ID); err != nil {
 		s.serverError(w, r, err)
 		return
 	}
@@ -164,9 +164,9 @@ func (s *Server) handleAdminUserDisable(w http.ResponseWriter, r *http.Request) 
 		s.adminUserError(w, r, t, err)
 		return
 	}
-	// Also checked on every request (see userForToken), but there is no
-	// reason to keep the sessions around.
-	if err := s.sessions.DeleteForUser(r.Context(), t.ID); err != nil {
+	// Also checked on every request (see activeUser), but there is no
+	// reason to keep the sessions and remember tokens around.
+	if err := s.endAllSessions(r.Context(), t.ID); err != nil {
 		s.serverError(w, r, err)
 		return
 	}

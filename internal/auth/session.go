@@ -39,13 +39,12 @@ func NewSessions(db *sql.DB) *Sessions {
 
 // Create starts a session for userID and returns the token for the cookie.
 func (s *Sessions) Create(ctx context.Context, userID int64) (string, error) {
-	raw := make([]byte, 32) // 256 bits: impossible to guess
-	if _, err := rand.Read(raw); err != nil {
+	token, err := newToken()
+	if err != nil {
 		return "", err
 	}
-	token := base64.RawURLEncoding.EncodeToString(raw)
 	now := s.Now().Unix()
-	_, err := s.db.ExecContext(ctx,
+	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO sessions (token_hash, user_id, created_at, last_seen_at, expires_at)
 		 VALUES (?, ?, ?, ?, ?)`,
 		hashToken(token), userID, now, now, now+int64(MaxLifetime/time.Second))
@@ -121,6 +120,15 @@ func (s *Sessions) DeleteExpired(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	return res.RowsAffected()
+}
+
+// newToken returns a random 256-bit token, URL-safe base64 encoded.
+func newToken() (string, error) {
+	raw := make([]byte, 32) // 256 bits: impossible to guess
+	if _, err := rand.Read(raw); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(raw), nil
 }
 
 // hashToken is what the database stores instead of the token, so a copy of

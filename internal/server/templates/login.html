@@ -7,6 +7,7 @@
     <input id="username" name="username" value="{{.Form.Username}}" autocomplete="username" required autofocus>
     <label for="password">Password</label>
     <input id="password" name="password" type="password" autocomplete="current-password" required>
+    <label class="check"><input type="checkbox" name="remember"{{if .Form.Remember}} checked{{end}}> Remember me for 30 days</label>
     <button type="submit">Log in</button>
   </form>
 {{end}}

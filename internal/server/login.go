@@ -11,9 +11,6 @@ import (
 	"github.com/keyboardsmash/hodrs-hoard/internal/user"
 )
 
-// sessionCookie is the cookie that holds the session token.
-const sessionCookie = "hoard_session"
-
 // maxFormBytes caps login and setup form posts.
 const maxFormBytes = 64 << 10 // 64 KiB; `<<` is a bit shift, 64 * 1024
 
@@ -35,46 +32,6 @@ func currentUser(ctx context.Context) *user.User {
 // isPublic lists paths that work without login and before setup.
 func isPublic(path string) bool {
 	return path == "/healthz"
-}
-
-// loadUser reads the session cookie and, if it's valid, stores the user in
-// the request context for handlers and templates.
-func (s *Server) loadUser(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		c, err := r.Cookie(sessionCookie)
-		if err != nil || isPublic(r.URL.Path) {
-			next.ServeHTTP(w, r) // no cookie: anonymous
-			return
-		}
-		u, err := s.userForToken(r.Context(), c.Value)
-		switch {
-		case errors.Is(err, auth.ErrNoSession):
-			clearSessionCookie(w, r) // stale cookie; stop the browser sending it
-		case err != nil:
-			s.serverError(w, r, err)
-			return
-		default:
-			r = r.WithContext(context.WithValue(r.Context(), userKey, u))
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-// userForToken returns the active user for a session token. Sessions of
-// disabled or missing users are deleted.
-func (s *Server) userForToken(ctx context.Context, token string) (*user.User, error) {
-	id, err := s.sessions.Lookup(ctx, token)
-	if err != nil {
-		return nil, err
-	}
-	u, err := s.users.ByID(ctx, id)
-	if errors.Is(err, user.ErrNotFound) || (err == nil && u.Disabled()) {
-		if err := s.sessions.DeleteForUser(ctx, id); err != nil {
-			return nil, err
-		}
-		return nil, auth.ErrNoSession
-	}
-	return u, err
 }
 
 // setupGate sends every request to /setup until the first admin exists.
@@ -106,6 +63,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	username := r.PostForm.Get("username")
 	password := r.PostForm.Get("password")
 	next := safeNext(r.PostForm.Get("next"))
+	remember := r.PostForm.Get("remember") == "on"
 
 	u, err := s.checkLogin(r.Context(), username, password)
 	if errors.Is(err, errBadLogin) {
@@ -115,7 +73,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		s.render(w, r, http.StatusUnauthorized, "login.html", pageData{
 			Title: "Log in",
 			Error: "Wrong username or password.",
-			Form:  formValues{Username: username, Next: next},
+			Form:  formValues{Username: username, Next: next, Remember: remember},
 		})
 		return
 	}
@@ -123,11 +81,11 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	if err := s.startSession(w, r, u); err != nil {
+	if err := s.login(w, r, u, remember); err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	s.log.Info("login", "username", u.Username)
+	s.log.Info("login", "username", u.Username, "remember", remember)
 	http.Redirect(w, r, next, http.StatusSeeOther)
 }
 
@@ -164,56 +122,6 @@ func (s *Server) checkLogin(ctx context.Context, username, password string) (*us
 		}
 	}
 	return u, nil
-}
-
-// startSession ends any session the browser already has and starts a new
-// one. A fresh token on every login prevents session fixation (an attacker
-// planting a known token before the victim logs in).
-func (s *Server) startSession(w http.ResponseWriter, r *http.Request, u *user.User) error {
-	if c, err := r.Cookie(sessionCookie); err == nil {
-		if err := s.sessions.Delete(r.Context(), c.Value); err != nil {
-			return err
-		}
-	}
-	token, err := s.sessions.Create(r.Context(), u.ID)
-	if err != nil {
-		return err
-	}
-	if err := s.users.TouchLogin(r.Context(), u.ID); err != nil {
-		return err
-	}
-	http.SetCookie(w, &http.Cookie{
-		Name:     sessionCookie,
-		Value:    token,
-		Path:     "/",
-		HttpOnly: true, // JavaScript can't read it
-		Secure:   isHTTPS(r),
-		SameSite: http.SameSiteLaxMode, // not sent on cross-site POSTs
-		// No MaxAge: the browser drops the cookie when it closes. The server
-		// also ends the session after auth.IdleTimeout / auth.MaxLifetime.
-	})
-	return nil
-}
-
-func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
-	if c, err := r.Cookie(sessionCookie); err == nil {
-		if err := s.sessions.Delete(r.Context(), c.Value); err != nil {
-			s.serverError(w, r, err)
-			return
-		}
-	}
-	if u := currentUser(r.Context()); u != nil {
-		s.log.Info("logout", "username", u.Username)
-	}
-	clearSessionCookie(w, r)
-	http.Redirect(w, r, "/login", http.StatusSeeOther)
-}
-
-func clearSessionCookie(w http.ResponseWriter, r *http.Request) {
-	http.SetCookie(w, &http.Cookie{
-		Name: sessionCookie, Value: "", Path: "/", MaxAge: -1, // MaxAge < 0 deletes it
-		HttpOnly: true, Secure: isHTTPS(r), SameSite: http.SameSiteLaxMode,
-	})
 }
 
 func (s *Server) handleSetupForm(w http.ResponseWriter, r *http.Request) {
@@ -272,7 +180,7 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 
 	s.setupDone.Store(true)
 	s.log.Info("setup: created first admin", "username", u.Username)
-	if err := s.startSession(w, r, u); err != nil {
+	if err := s.login(w, r, u, false); err != nil {
 		s.serverError(w, r, err)
 		return
 	}
