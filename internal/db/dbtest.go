@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"log/slog"
 	"path/filepath"
 	"testing"
 )
@@ -19,5 +20,16 @@ func OpenTest(t *testing.T) *sql.DB {
 		t.Fatalf("open test database: %v", err)
 	}
 	t.Cleanup(func() { d.Close() }) // runs when the test ends
+	return d
+}
+
+// OpenTestMigrated is OpenTest with all migrations applied, for tests that
+// need the real schema.
+func OpenTestMigrated(t *testing.T) *sql.DB {
+	t.Helper()
+	d := OpenTest(t)
+	if err := Migrate(context.Background(), d, slog.New(slog.DiscardHandler)); err != nil {
+		t.Fatalf("migrate test database: %v", err)
+	}
 	return d
 }

@@ -49,9 +49,9 @@ Based on PHP4DVD's three permission levels (`legacy/includes/users.inc.php`).
 
 | Field         | Required | Notes                                         |
 |---------------|----------|-----------------------------------------------|
-| username      | yes      | Unique, case-insensitive                      |
+| username      | yes      | Unique, case-insensitive (Unicode-aware). Up to 64 letters, digits and `. _ - @` |
 | email         | no       | Unique if set                                 |
-| password      | yes      | Stored as an argon2id or bcrypt hash, never plain or MD5 |
+| password      | yes      | At least 10 characters, no complexity rules. Stored as an argon2id hash, never plain or MD5 |
 | role          | yes      | viewer / editor / admin                       |
 | created_at    | auto     |                                               |
 | last_login_at | auto     |                                               |
@@ -64,6 +64,11 @@ Based on PHP4DVD's three permission levels (`legacy/includes/users.inc.php`).
 - An admin creates users from the user management page.
 - On first start with an empty database, the app asks for an initial admin
   account. There is no default `admin`/`admin` login.
+- **Decided:** first-run setup is protected by a one-time setup code. While
+  no users exist, hoard prints a code (`XXXX-XXXX-XXXX`) to its log at
+  startup, and every page redirects to `/setup`, which asks for it. Only
+  someone who can read the server log can create the first admin. A new
+  code is made at each start until setup is done; then `/setup` is closed.
 - **Decided:** Do not allow self-registration.
 
 #### Update user
@@ -97,6 +102,31 @@ Based on PHP4DVD's three permission levels (`legacy/includes/users.inc.php`).
 - PHP4DVD stores unsalted MD5 password hashes, which must not be reused.
 - **Decided:** import username, email and role, and require a new password
   on first login.
+
+### 2.6 Sessions, passwords and CSRF
+
+- **Decided:** passwords are hashed with argon2id (RFC 9106 second
+  recommended parameters: 64 MiB, 3 iterations, 4 threads) in PHC string
+  format. Hashes with older parameters are upgraded at the next login.
+- Logins with an unknown username take as long as a wrong password, and
+  all failures show the same message, so usernames can't be probed.
+- **Decided:** sessions are stored server-side in the `sessions` table. The
+  cookie (`hoard_session`) holds a random 256-bit token; the database only
+  stores its SHA-256, so a copy of the database can't hijack sessions.
+- A session ends after **12 hours without activity** or **7 days after
+  login**, whichever comes first, or at logout. The cookie itself is a
+  browser-session cookie; staying logged in across browser restarts is
+  "remember me" (milestone 2d). Expired sessions are cleaned up hourly.
+- Cookie flags: `HttpOnly`, `SameSite=Lax`, and `Secure` when the request
+  came over HTTPS (directly, or via a proxy setting `X-Forwarded-Proto`).
+- Every login issues a new session token (no session fixation).
+- **Decided:** CSRF protection uses Go's `http.CrossOriginProtection`:
+  cross-origin POST/PUT/PATCH/DELETE requests are rejected based on the
+  `Sec-Fetch-Site` and `Origin` headers. Forms need no hidden tokens, which
+  also suits htmx. Consequence: GET requests must never change data.
+- **Later:** login rate limiting (per IP and per username).
+- **Later:** command-line admin recovery, for example
+  `hoard user reset-password <name>`, for admins locked out of the web UI.
 
 ---
 
@@ -336,3 +366,7 @@ API keys come from configuration and are never committed.
 | 2026-11-09 | Windows not supported; Windows builds fail on purpose. |
 | 2026-11-10 | PostgreSQL support removed; SQLite only (replaces the pgx decision). Database is always `hoard.db` in the data folder. |
 | 2026-11-10 | Dependencies pinned by `go.mod`/`go.sum`; `vendor/` is not committed (the SQLite driver alone is ~140 MB vendored). |
+| 2026-11-10 | First-run setup requires a one-time code printed to the server log. |
+| 2026-11-10 | Sessions: server-side, token hashed in the database, 12 h idle / 7 days absolute. |
+| 2026-11-10 | CSRF protection via stdlib `http.CrossOriginProtection` (header-based, no form tokens). |
+| 2026-11-10 | Login rate limiting and CLI admin recovery deferred (Later). |

@@ -1,0 +1,12 @@
+{{define "content"}}
+  <h2>Log in</h2>
+  {{with .Error}}<p class="error">{{.}}</p>{{end}}
+  <form class="stacked" method="post" action="/login">
+    <input type="hidden" name="next" value="{{.Form.Next}}">
+    <label for="username">Username</label>
+    <input id="username" name="username" value="{{.Form.Username}}" autocomplete="username" required autofocus>
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
+    <button type="submit">Log in</button>
+  </form>
+{{end}}

@@ -1,0 +1,40 @@
+{{/* Shared page frame. Each page file defines "content" (and may define "title"). */}}
+{{define "layout"}}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{if .Title}}{{.Title}} · {{end}}{{.AppName}}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
+    header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; border-bottom: 1px solid #ddd; margin-bottom: 1.5rem; }
+    header h1 { font-size: 1.25rem; margin: .75rem 0; }
+    header h1 a { color: inherit; text-decoration: none; }
+    header form { display: inline; }
+    dl { display: grid; grid-template-columns: max-content 1fr; gap: .25rem 1rem; }
+    dt { font-weight: 600; }
+    form.stacked label { display: block; margin-top: .75rem; font-weight: 600; }
+    form.stacked input { display: block; width: 100%; max-width: 22rem; padding: .4rem; font: inherit; box-sizing: border-box; }
+    form.stacked button { margin-top: 1rem; }
+    .hint { font-weight: normal; color: #555; font-size: .9em; }
+    .ok { color: #15803d; }
+    .error { color: #b91c1c; }
+    p.error { border: 1px solid #b91c1c; padding: .5rem .75rem; border-radius: .25rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1><a href="/">{{.AppName}}</a></h1>
+    {{with .User}}
+    <div>
+      {{.Username}} ({{.Role}})
+      <form method="post" action="/logout"><button type="submit">Log out</button></form>
+    </div>
+    {{end}}
+  </header>
+  <main>
+    {{template "content" .}}
+  </main>
+</body>
+</html>
+{{end}}

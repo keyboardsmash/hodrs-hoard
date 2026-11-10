@@ -61,7 +61,7 @@ func run() error {
 		return fmt.Errorf("migrating database: %w", err)
 	}
 
-	srv, err := server.New(version, log, database)
+	srv, err := server.New(startCtx, version, log, database)
 	if err != nil {
 		return err
 	}
@@ -76,6 +76,10 @@ func run() error {
 	// which is what `podman stop` sends.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop() // `defer` runs when run() returns, like a finally block
+
+	// `go` starts the cleanup loop in the background; it stops when ctx is
+	// cancelled at shutdown.
+	go srv.CleanupSessions(ctx)
 
 	// Run the server in a goroutine (a lightweight thread) so this function
 	// can wait for either a server error or a shutdown signal.
