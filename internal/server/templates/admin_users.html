@@ -1,0 +1,18 @@
+{{define "content"}}
+  <h2>Users</h2>
+  <p><a href="/admin/users/new">New user</a></p>
+  <table>
+    <thead><tr><th>Username</th><th>Email</th><th>Role</th><th>Last login</th><th>Status</th></tr></thead>
+    <tbody>
+    {{range .Users}}
+      <tr{{if .Disabled}} class="disabled"{{end}}>
+        <td><a href="/admin/users/{{.ID}}">{{.Username}}</a></td>
+        <td>{{.Email}}</td>
+        <td>{{.Role}}</td>
+        <td>{{if .LastLoginAt.IsZero}}never{{else}}{{.LastLoginAt.Format "2006-01-02 15:04"}}{{end}}</td>
+        <td>{{if .Disabled}}disabled{{else if .MustChangePassword}}must change password{{else}}active{{end}}</td>
+      </tr>
+    {{end}}
+    </tbody>
+  </table>
+{{end}}

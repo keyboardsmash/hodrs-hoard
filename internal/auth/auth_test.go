@@ -211,3 +211,20 @@ func TestSessionDeleteForUserAndExpired(t *testing.T) {
 		t.Errorf("fresh session removed: %v", err)
 	}
 }
+
+func TestSessionDeleteOthers(t *testing.T) {
+	ctx := context.Background()
+	s, _ := newSessions(t)
+	keep, _ := s.Create(ctx, 1)
+	other, _ := s.Create(ctx, 1)
+
+	if err := s.DeleteOthers(ctx, 1, keep); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Lookup(ctx, keep); err != nil {
+		t.Errorf("kept session: %v", err)
+	}
+	if _, err := s.Lookup(ctx, other); err != ErrNoSession {
+		t.Errorf("other session: %v, want ErrNoSession", err)
+	}
+}

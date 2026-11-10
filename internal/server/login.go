@@ -88,22 +88,6 @@ func (s *Server) setupGate(next http.Handler) http.Handler {
 	})
 }
 
-// requireUser wraps handlers that need a logged-in user. Anonymous visitors
-// are sent to the login page, which brings them back afterwards.
-func (s *Server) requireUser(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if currentUser(r.Context()) == nil {
-			target := "/login"
-			if r.URL.RequestURI() != "/" {
-				target += "?next=" + url.QueryEscape(r.URL.RequestURI())
-			}
-			http.Redirect(w, r, target, http.StatusSeeOther)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
 func (s *Server) handleLoginForm(w http.ResponseWriter, r *http.Request) {
 	next := safeNext(r.URL.Query().Get("next"))
 	if currentUser(r.Context()) != nil {

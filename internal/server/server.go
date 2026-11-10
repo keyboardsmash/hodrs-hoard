@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/keyboardsmash/hodrs-hoard/internal/auth"
+	"github.com/keyboardsmash/hodrs-hoard/internal/settings"
 	"github.com/keyboardsmash/hodrs-hoard/internal/user"
 )
 
@@ -27,8 +28,13 @@ var templateFS embed.FS
 // AppName is the display name used in page titles and the UI.
 const AppName = "Höðrs Hoard"
 
-// pages are the page templates. Each is parsed together with layout.html.
-var pages = []string{"index.html", "login.html", "setup.html"}
+// pages are the page templates. Each is parsed together with layout.html
+// and partials.html (shared snippets).
+var pages = []string{
+	"index.html", "login.html", "setup.html", "error.html",
+	"account.html", "password.html",
+	"admin_users.html", "admin_user_new.html", "admin_user.html", "admin_settings.html",
+}
 
 // Server holds what the HTTP handlers need.
 type Server struct {
@@ -38,7 +44,14 @@ type Server struct {
 	db        *sql.DB
 	users     *user.Store
 	sessions  *auth.Sessions
+	settings  *settings.Store
 	templates map[string]*template.Template
+
+	// anonymous mirrors the anonymous browsing setting. It's read on every
+	// anonymous request, so it's kept in memory; the admin settings page
+	// updates both the database and this copy. (Only one hoard process may
+	// use a database, so the copy can't go stale.)
+	anonymous atomic.Bool
 
 	// setupDone is true once at least one user exists. atomic.Bool is safe
 	// to read and write from many requests (goroutines) at once.
@@ -52,7 +65,7 @@ type Server struct {
 func New(ctx context.Context, version string, log *slog.Logger, db *sql.DB) (*Server, error) {
 	tmpl := make(map[string]*template.Template, len(pages))
 	for _, p := range pages {
-		t, err := template.ParseFS(templateFS, "templates/layout.html", "templates/"+p)
+		t, err := template.ParseFS(templateFS, "templates/layout.html", "templates/partials.html", "templates/"+p)
 		if err != nil {
 			return nil, err
 		}
@@ -66,8 +79,15 @@ func New(ctx context.Context, version string, log *slog.Logger, db *sql.DB) (*Se
 		db:        db,
 		users:     user.NewStore(db),
 		sessions:  auth.NewSessions(db),
+		settings:  settings.NewStore(db),
 		templates: tmpl,
 	}
+
+	anon, err := s.settings.Bool(ctx, settings.AnonymousBrowsing, false)
+	if err != nil {
+		return nil, fmt.Errorf("reading setting %s: %w", settings.AnonymousBrowsing, err)
+	}
+	s.anonymous.Store(anon)
 
 	auth.PrepareDummy()
 
@@ -93,12 +113,34 @@ func New(ctx context.Context, version string, log *slog.Logger, db *sql.DB) (*Se
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.handleHealth)
-	mux.Handle("GET /{$}", s.requireUser(http.HandlerFunc(s.handleIndex)))
 	mux.HandleFunc("GET /login", s.handleLoginForm)
 	mux.HandleFunc("POST /login", s.handleLogin)
 	mux.HandleFunc("POST /logout", s.handleLogout)
 	mux.HandleFunc("GET /setup", s.handleSetupForm)
 	mux.HandleFunc("POST /setup", s.handleSetup)
+
+	// Read-only pages: logged-in users, and anonymous visitors when allowed.
+	mux.Handle("GET /{$}", s.browse(s.handleIndex))
+
+	// Own account: any logged-in user.
+	viewer := func(h http.HandlerFunc) http.Handler { return s.requireRole(user.RoleViewer, h) }
+	mux.Handle("GET /account", viewer(s.handleAccount))
+	mux.Handle("POST /account/email", viewer(s.handleAccountEmail))
+	mux.Handle("GET /account/password", viewer(s.handlePasswordForm))
+	mux.Handle("POST /account/password", viewer(s.handlePassword))
+
+	// Admin pages. {id} is a wildcard; handlers read it with r.PathValue.
+	admin := func(h http.HandlerFunc) http.Handler { return s.requireRole(user.RoleAdmin, h) }
+	mux.Handle("GET /admin/users", admin(s.handleAdminUsers))
+	mux.Handle("GET /admin/users/new", admin(s.handleAdminUserNewForm))
+	mux.Handle("POST /admin/users/new", admin(s.handleAdminUserNew))
+	mux.Handle("GET /admin/users/{id}", admin(s.handleAdminUser))
+	mux.Handle("POST /admin/users/{id}/profile", admin(s.handleAdminUserProfile))
+	mux.Handle("POST /admin/users/{id}/password", admin(s.handleAdminUserPassword))
+	mux.Handle("POST /admin/users/{id}/disable", admin(s.handleAdminUserDisable))
+	mux.Handle("POST /admin/users/{id}/enable", admin(s.handleAdminUserEnable))
+	mux.Handle("GET /admin/settings", admin(s.handleAdminSettings))
+	mux.Handle("POST /admin/settings", admin(s.handleAdminSettingsSave))
 
 	// CSRF protection from the standard library (Go 1.25+). It rejects
 	// cross-site POST/PUT/DELETE requests using the browser's Sec-Fetch-Site
@@ -114,6 +156,7 @@ func (s *Server) Handler() http.Handler {
 	// Middleware wraps from the inside out: a request passes logRequests
 	// first and the mux last.
 	var h http.Handler = mux
+	h = s.passwordGate(h)
 	h = s.setupGate(h)
 	h = s.loadUser(h)
 	h = csrf.Handler(h)
@@ -197,10 +240,31 @@ type pageData struct {
 	AppName        string
 	Title          string
 	User           *user.User // nil when nobody is logged in
+	AllowAnonymous bool       // anonymous browsing is on (shows a "Log in" link)
+	Message        string     // confirmation after a save, see messages
 	Error          string
 	Form           formValues
 	Health         health
 	MinPasswordLen int
+
+	// Account and admin pages.
+	Users     []*user.User // user list
+	Target    *user.User   // the user an admin page is about
+	Roles     []user.Role  // choices for role menus
+	Anonymous bool         // the anonymous browsing setting, for its checkbox
+	Forced    bool         // the user must change their password now
+}
+
+// messages are the confirmations a page shows after a redirect with
+// ?msg=<key>. Only these fixed texts can appear, so a crafted link can't put
+// arbitrary words on the page.
+var messages = map[string]string{
+	"created":        "User created.",
+	"saved":          "Changes saved.",
+	"password":       "Password changed.",
+	"password-reset": "Password reset. The user must choose a new one at next login.",
+	"disabled":       "User disabled. Their sessions have been ended.",
+	"enabled":        "User enabled.",
 }
 
 // formValues are submitted values shown again after an error. Passwords are
@@ -209,7 +273,10 @@ type formValues struct {
 	Code     string
 	Username string
 	Email    string
+	Role     user.Role
 	Next     string
+	// MustChange is the "must change password" checkbox on the new-user form.
+	MustChange bool
 }
 
 // render executes a page template. It renders into a buffer first, so a
@@ -217,7 +284,12 @@ type formValues struct {
 func (s *Server) render(w http.ResponseWriter, r *http.Request, status int, page string, data pageData) {
 	data.AppName = AppName
 	data.User = currentUser(r.Context())
+	data.AllowAnonymous = s.anonymous.Load()
 	data.MinPasswordLen = user.MinPasswordLen
+	data.Roles = user.Roles
+	if data.Message == "" {
+		data.Message = messages[r.URL.Query().Get("msg")] // unknown keys give ""
+	}
 
 	var buf bytes.Buffer
 	if err := s.templates[page].ExecuteTemplate(&buf, "layout", data); err != nil {

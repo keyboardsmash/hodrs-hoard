@@ -20,19 +20,35 @@
     .ok { color: #15803d; }
     .error { color: #b91c1c; }
     p.error { border: 1px solid #b91c1c; padding: .5rem .75rem; border-radius: .25rem; }
+    p.message { border: 1px solid #15803d; color: #15803d; padding: .5rem .75rem; border-radius: .25rem; }
+    form.stacked select { display: block; padding: .4rem; font: inherit; }
+    form.stacked label.check { font-weight: normal; display: flex; gap: .5rem; align-items: center; }
+    form.stacked label.check input { display: inline; width: auto; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { text-align: left; padding: .35rem .5rem; border-bottom: 1px solid #ddd; }
+    tr.disabled td { color: #888; }
+    section { margin-top: 2rem; }
   </style>
 </head>
 <body>
   <header>
     <h1><a href="/">{{.AppName}}</a></h1>
-    {{with .User}}
-    <div>
-      {{.Username}} ({{.Role}})
-      <form method="post" action="/logout"><button type="submit">Log out</button></form>
-    </div>
-    {{end}}
+    <nav>
+      {{with .User}}
+        {{if not .MustChangePassword}}
+          {{if .Can "admin"}}<a href="/admin/users">Users</a> · <a href="/admin/settings">Settings</a> ·{{end}}
+          <a href="/account">{{.Username}}</a> ({{.Role}})
+        {{else}}
+          {{.Username}}
+        {{end}}
+        <form method="post" action="/logout"><button type="submit">Log out</button></form>
+      {{else}}
+        {{if .AllowAnonymous}}<a href="/login">Log in</a>{{end}}
+      {{end}}
+    </nav>
   </header>
   <main>
+    {{with .Message}}<p class="message">{{.}}</p>{{end}}
     {{template "content" .}}
   </main>
 </body>

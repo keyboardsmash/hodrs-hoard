@@ -1,0 +1,9 @@
+{{/* Snippets shared by several pages. Parsed together with every page. */}}
+
+{{/* A role menu with .Form.Role selected. Used by both user forms. */}}
+{{define "role-select"}}
+    <select id="role" name="role">
+      {{$current := .Form.Role}}{{/* $current: range below changes what "." means */}}
+      {{range .Roles}}<option value="{{.}}"{{if eq . $current}} selected{{end}}>{{.}}</option>{{end}}
+    </select>
+{{end}}

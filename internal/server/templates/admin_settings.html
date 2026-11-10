@@ -1,0 +1,10 @@
+{{define "content"}}
+  <h2>Settings</h2>
+  <form class="stacked" method="post" action="/admin/settings">
+    <label class="check">
+      <input type="checkbox" name="anonymous_browsing"{{if .Anonymous}} checked{{end}}>
+      Allow anonymous visitors to browse the catalogue (read-only)
+    </label>
+    <button type="submit">Save</button>
+  </form>
+{{end}}

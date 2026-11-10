@@ -72,10 +72,21 @@ Based on PHP4DVD's three permission levels (`legacy/includes/users.inc.php`).
 - **Decided:** Do not allow self-registration.
 
 #### Update user
-- Users can change their own email and password.
+- Users can change their own email and password (`/account`). Changing the
+  password requires the current one, and ends the user's other sessions.
 - Only admins can change roles, and an admin cannot change their own role.
   This matches PHP4DVD (`legacy/includes/user.update.inc.php`).
-- Admins can reset another user's password.
+- Admins can reset another user's password (`/admin/users/{id}`). **Decided:**
+  a reset password is temporary: the user is logged out everywhere and must
+  choose a new password at next login. Admins change their own password on
+  the account page like everyone else.
+- Admins can create users with an initial password; "must change password
+  at first login" is ticked by default.
+- **Decided:** forced password change. While `must_change_password` is set,
+  every page except the password form and logout redirects to
+  `/account/password`. The form asks for the current (temporary) password
+  too, and the new one must differ from it.
+- **Later:** renaming users (admins changing a username).
 
 #### Disable user
 - **Decided:** users are disabled, never deleted, so the history of who
@@ -96,6 +107,9 @@ Based on PHP4DVD's three permission levels (`legacy/includes/users.inc.php`).
 - Desktop mode. Default Option to skip login entirely and use a single
   implicit admin.
 - A setting to allow anonymous visitors to be able to browse read-only.
+  **Decided:** admins switch it on `/admin/settings`; default off. Anonymous
+  visitors can see read-only pages only. Account and admin pages, and
+  every change, always need a login.
 
 ### 2.5 Importing PHP4DVD users
 
@@ -370,3 +384,7 @@ API keys come from configuration and are never committed.
 | 2026-11-10 | Sessions: server-side, token hashed in the database, 12 h idle / 7 days absolute. |
 | 2026-11-10 | CSRF protection via stdlib `http.CrossOriginProtection` (header-based, no form tokens). |
 | 2026-11-10 | Login rate limiting and CLI admin recovery deferred (Later). |
+| 2026-11-10 | Admin password resets are temporary: forced change at next login. |
+| 2026-11-10 | Forced password change asks for the current password too. |
+| 2026-11-10 | Renaming users deferred (Later). |
+| 2026-11-10 | Plain HTML forms for user pages; htmx arrives with milestone 3. |

@@ -207,7 +207,7 @@ func TestSetupFlow(t *testing.T) {
 
 	// The new admin is logged in.
 	rec = a.do("GET", "/", nil, cookie)
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Admin (admin)") {
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), ">Admin</a> (admin)") {
 		t.Errorf("GET / after setup: %d %s", rec.Code, rec.Body)
 	}
 
@@ -247,7 +247,7 @@ func TestLoginLogout(t *testing.T) {
 		t.Errorf("cookie flags: %+v", cookie)
 	}
 	rec := a.do("GET", "/", nil, cookie)
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Höðr (editor)") {
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), ">Höðr</a> (editor)") {
 		t.Errorf("GET / logged in: %d", rec.Code)
 	}
 	if cc := rec.Header().Get("Cache-Control"); cc != "no-store" {

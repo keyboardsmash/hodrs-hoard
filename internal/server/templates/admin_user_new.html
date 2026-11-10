@@ -1,0 +1,19 @@
+{{define "content"}}
+  <h2>New user</h2>
+  {{with .Error}}<p class="error">{{.}}</p>{{end}}
+  <form class="stacked" method="post" action="/admin/users/new">
+    <label for="username">Username</label>
+    <input id="username" name="username" value="{{.Form.Username}}" autocomplete="off" required autofocus>
+    <label for="email">Email <span class="hint">(optional)</span></label>
+    <input id="email" name="email" type="email" value="{{.Form.Email}}" autocomplete="off">
+    <label for="role">Role</label>
+    {{template "role-select" .}}
+    <label for="password">Initial password <span class="hint">(at least {{.MinPasswordLen}} characters)</span></label>
+    <input id="password" name="password" type="password" autocomplete="new-password" minlength="{{.MinPasswordLen}}" required>
+    <label for="password2">Repeat password</label>
+    <input id="password2" name="password2" type="password" autocomplete="new-password" required>
+    <label class="check"><input type="checkbox" name="must_change"{{if .Form.MustChange}} checked{{end}}> Must change password at first login</label>
+    <button type="submit">Create user</button>
+  </form>
+  <p><a href="/admin/users">Cancel</a></p>
+{{end}}

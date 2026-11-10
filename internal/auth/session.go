@@ -102,6 +102,14 @@ func (s *Sessions) DeleteForUser(ctx context.Context, userID int64) error {
 	return err
 }
 
+// DeleteOthers ends all sessions of a user except the one with keepToken,
+// for example after the user changed their own password.
+func (s *Sessions) DeleteOthers(ctx context.Context, userID int64, keepToken string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ? AND token_hash != ?`,
+		userID, hashToken(keepToken))
+	return err
+}
+
 // DeleteExpired removes sessions that are past their lifetime or idle too
 // long, and returns how many were removed.
 func (s *Sessions) DeleteExpired(ctx context.Context) (int64, error) {

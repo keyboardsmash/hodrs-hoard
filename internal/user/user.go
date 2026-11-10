@@ -25,10 +25,30 @@ const (
 	RoleAdmin  Role = "admin"
 )
 
+// Roles lists all roles from least to most powerful, for forms.
+var Roles = []Role{RoleViewer, RoleEditor, RoleAdmin}
+
 // Valid reports whether r is one of the three roles.
 func (r Role) Valid() bool {
 	return r == RoleViewer || r == RoleEditor || r == RoleAdmin
 }
+
+// rank orders the roles; unknown roles rank lowest.
+func (r Role) rank() int {
+	switch r {
+	case RoleViewer:
+		return 1
+	case RoleEditor:
+		return 2
+	case RoleAdmin:
+		return 3
+	}
+	return 0
+}
+
+// AtLeast reports whether r has all the rights of min. Each role includes
+// the ones below it: an admin can do everything an editor can.
+func (r Role) AtLeast(min Role) bool { return r.rank() >= min.rank() && r.Valid() }
 
 // Limits for user input.
 const (
@@ -55,6 +75,10 @@ type User struct {
 // Disabled reports whether an admin has disabled the user.
 func (u *User) Disabled() bool { return !u.DisabledAt.IsZero() }
 
+// Can reports whether the user's role includes min. Templates call it as
+// {{if .User.Can "admin"}}; the string converts to Role automatically.
+func (u *User) Can(min Role) bool { return u.Role.AtLeast(min) }
+
 // New holds the input for creating a user. The password is plain text here
 // and hashed by Create.
 type New struct {
@@ -78,6 +102,12 @@ func (e *FieldError) Error() string { return e.Field + ": " + e.Message }
 var (
 	ErrNotFound  = errors.New("user not found")
 	ErrSetupDone = errors.New("setup already done: users exist")
+
+	// Rules from spec section 2.3. Handlers show these messages as they are.
+	ErrOwnRole      = errors.New("you can't change your own role")
+	ErrOwnAccount   = errors.New("you can't disable your own account")
+	ErrLastAdmin    = errors.New("the last active admin can't be disabled or demoted")
+	ErrSamePassword = errors.New("the new password must differ from the current one")
 )
 
 // Store reads and writes the users table.
@@ -268,8 +298,31 @@ func (s *Store) SetPasswordHash(ctx context.Context, id int64, hash string) erro
 }
 
 // one runs a single-row SELECT on users with the given WHERE clause.
-// `args ...any` is a variadic parameter: any number of values of any type.
+// `args ...any` is a variadic parameter: any number of values of any type,
+// and `args...` passes them on.
 func (s *Store) one(ctx context.Context, where string, args ...any) (*User, error) {
+	return oneFrom(ctx, s.db, where, args...)
+}
+
+// oneFrom is one for either the database or a transaction.
+func oneFrom(ctx context.Context, q querier, where string, args ...any) (*User, error) {
+	u, err := scanUser(q.QueryRowContext(ctx, `SELECT `+userColumns+` FROM users `+where, args...))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return u, err
+}
+
+// userColumns is the column list scanUser expects, in order.
+const userColumns = `id, username, email, password_hash, role, created_at, last_login_at, disabled_at, must_change_password`
+
+// scanner is what *sql.Row and *sql.Rows have in common, so scanUser works
+// for single-row and multi-row queries.
+type scanner interface {
+	Scan(dest ...any) error
+}
+
+func scanUser(sc scanner) (*User, error) {
 	var (
 		u                  User
 		email              sql.NullString // NULL-able columns scan into Null* types
@@ -277,14 +330,8 @@ func (s *Store) one(ctx context.Context, where string, args ...any) (*User, erro
 		created            int64
 		lastLogin, disable sql.NullInt64
 	)
-	err := s.db.QueryRowContext(ctx,
-		`SELECT id, username, email, password_hash, role, created_at, last_login_at, disabled_at, must_change_password
-		 FROM users `+where, args...,
-	).Scan(&u.ID, &u.Username, &email, &u.PasswordHash, &role, &created, &lastLogin, &disable, &u.MustChangePassword)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNotFound
-	}
-	if err != nil {
+	if err := sc.Scan(&u.ID, &u.Username, &email, &u.PasswordHash, &role, &created,
+		&lastLogin, &disable, &u.MustChangePassword); err != nil {
 		return nil, err
 	}
 	u.Email = email.String
