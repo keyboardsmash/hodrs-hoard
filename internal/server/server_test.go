@@ -1,7 +1,9 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -10,10 +12,20 @@ import (
 	"testing"
 )
 
+// fakeDB satisfies Pinger. A nil err means "database is up".
+type fakeDB struct{ err error }
+
+func (f fakeDB) PingContext(context.Context) error { return f.err }
+
 func newTestServer(t *testing.T) http.Handler {
 	t.Helper() // report failures at the caller's line, not here
+	return newTestServerWithDB(t, fakeDB{})
+}
+
+func newTestServerWithDB(t *testing.T, db Pinger) http.Handler {
+	t.Helper()
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	s, err := New("test", log)
+	s, err := New("test", log, db)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -36,7 +48,24 @@ func TestHealth(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if body.Status != "ok" || body.Version != "test" {
+	if body.Status != "ok" || body.Version != "test" || body.Database != "ok" {
+		t.Errorf("body = %+v", body)
+	}
+}
+
+func TestHealthDatabaseDown(t *testing.T) {
+	h := newTestServerWithDB(t, fakeDB{err: errors.New("connection refused")})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", rec.Code)
+	}
+	var body health
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.Status != "error" || body.Database != "unreachable" {
 		t.Errorf("body = %+v", body)
 	}
 }

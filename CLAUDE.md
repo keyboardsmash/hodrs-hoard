@@ -19,10 +19,12 @@ more). Successor to PHP4DVD, rewritten in Go. License: GPL-3.0.
   config file that is git-ignored.
 
 ## Stack
-- Go, standard library first; few dependencies; vendor them (go mod vendor).
+- Go, standard library first; few dependencies. Pin them with go.mod and
+  go.sum (commit both); don't commit vendor/.
 - No cgo in the server build: use modernc.org/sqlite, not mattn/go-sqlite3.
-- Databases: SQLite (default, desktop) and PostgreSQL (server), same code.
-  In the dev container PostgreSQL is reachable via $DATABASE_URL.
+- Database: SQLite only, for server and desktop alike. No PostgreSQL.
+  The database file lives in the data folder (HOARD_DATA_DIR).
+- Platforms: Linux and macOS. Windows is not supported.
 - Frontend: Go html/template + htmx. No npm, no node_modules.
 - Desktop (last milestone): Wails v3, same UI.
 - Distribution: static binary, container image, AppImage.

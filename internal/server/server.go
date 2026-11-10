@@ -2,6 +2,7 @@
 package server
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"html/template"
@@ -19,17 +20,26 @@ var templateFS embed.FS
 // AppName is the display name used in page titles and the UI.
 const AppName = "Höðrs Hoard"
 
-// Server holds what the HTTP handlers need. Later milestones add the
-// database and other dependencies here.
+// Pinger is the part of the database the server needs for now. Accepting a
+// small interface instead of *db.DB keeps tests free of a real database.
+// Any type with a matching PingContext method satisfies it automatically;
+// Go has no "implements" keyword.
+type Pinger interface {
+	PingContext(ctx context.Context) error
+}
+
+// Server holds what the HTTP handlers need. Later milestones add more
+// dependencies here.
 type Server struct {
 	version   string
 	started   time.Time
 	log       *slog.Logger
+	db        Pinger
 	templates *template.Template
 }
 
 // New parses the embedded templates and returns a ready Server.
-func New(version string, log *slog.Logger) (*Server, error) {
+func New(version string, log *slog.Logger, db Pinger) (*Server, error) {
 	tmpl, err := template.ParseFS(templateFS, "templates/*.html")
 	if err != nil {
 		return nil, err
@@ -38,6 +48,7 @@ func New(version string, log *slog.Logger) (*Server, error) {
 		version:   version,
 		started:   time.Now(),
 		log:       log,
+		db:        db,
 		templates: tmpl,
 	}, nil
 }
@@ -57,25 +68,42 @@ func (s *Server) Handler() http.Handler {
 // health is the JSON body of /healthz. The `json:"..."` struct tags set the
 // key names used when encoding.
 type health struct {
-	Status  string `json:"status"`
-	Version string `json:"version"`
-	Uptime  string `json:"uptime"`
+	Status   string `json:"status"`
+	Version  string `json:"version"`
+	Uptime   string `json:"uptime"`
+	Database string `json:"database"`
 }
 
-func (s *Server) health() health {
-	return health{
-		Status:  "ok",
-		Version: s.version,
-		Uptime:  time.Since(s.started).Round(time.Second).String(),
+// health checks the database with a short timeout, so a hanging database
+// can't make health checks hang too.
+func (s *Server) health(ctx context.Context) health {
+	h := health{
+		Status:   "ok",
+		Version:  s.version,
+		Uptime:   time.Since(s.started).Round(time.Second).String(),
+		Database: "ok",
 	}
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	if err := s.db.PingContext(ctx); err != nil {
+		s.log.Warn("health: database unreachable", "err", err)
+		h.Status = "error"
+		h.Database = "unreachable"
+	}
+	return h
 }
 
-// handleHealth is for monitoring and container health checks.
+// handleHealth is for monitoring and container health checks. It answers
+// 503 Service Unavailable when the database can't be reached.
 // The method receiver `(s *Server)` makes this a method on Server.
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	h := s.health(r.Context())
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
-	if err := json.NewEncoder(w).Encode(s.health()); err != nil {
+	if h.Status != "ok" {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}
+	if err := json.NewEncoder(w).Encode(h); err != nil {
 		s.log.Error("write health response", "err", err)
 	}
 }
@@ -85,7 +113,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	data := struct {
 		AppName string
 		Health  health
-	}{AppName, s.health()}
+	}{AppName, s.health(r.Context())}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := s.templates.ExecuteTemplate(w, "index.html", data); err != nil {

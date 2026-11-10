@@ -18,8 +18,9 @@ coverage.*
 *.coverprofile
 profile.cov
 
-# Dependency directories (remove the comment below to include it)
-# vendor/
+# Dependencies are pinned by go.mod/go.sum and not committed
+# (see docs/spec.md, decision log). `go mod vendor` output stays local.
+vendor/
 
 # Go workspace file
 go.work

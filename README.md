@@ -19,6 +19,9 @@ Then open http://localhost:8080/ or http://localhost:8080/healthz.
 |-------------------|---------|------------------------------------|
 | `HOARD_ADDR`      | `:8080` | Listen address, `host:port`        |
 | `HOARD_LOG_LEVEL` | `info`  | `debug`, `info`, `warn` or `error` |
+| `HOARD_DATA_DIR`  | `~/.local/share/hodrs-hoard` | Data folder; the SQLite database is `hoard.db` in it |
+
+Höðrs Hoard uses SQLite only and runs on Linux and macOS.
 
 ## License
 

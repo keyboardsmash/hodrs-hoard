@@ -9,10 +9,12 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
 	"github.com/keyboardsmash/hodrs-hoard/internal/config"
+	"github.com/keyboardsmash/hodrs-hoard/internal/db"
 	"github.com/keyboardsmash/hodrs-hoard/internal/server"
 )
 
@@ -31,14 +33,35 @@ func main() {
 }
 
 func run() error {
-	cfg, err := config.Load(os.Getenv)
+	cfg, err := config.Load(config.Env{
+		Getenv:        os.Getenv,
+		UserConfigDir: os.UserConfigDir,
+		UserHomeDir:   os.UserHomeDir,
+		GOOS:          runtime.GOOS,
+	})
 	if err != nil {
 		return err
 	}
 
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: cfg.LogLevel}))
 
-	srv, err := server.New(version, log)
+	// Opening and migrating get 30 seconds, so a locked or unreachable
+	// database file gives a clear error instead of a hang.
+	startCtx, cancelStart := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancelStart()
+
+	database, err := db.Open(startCtx, cfg.DatabasePath)
+	if err != nil {
+		return err
+	}
+	defer database.Close()
+	log.Info("database", "path", cfg.DatabasePath)
+
+	if err := db.Migrate(startCtx, database, log); err != nil {
+		return fmt.Errorf("migrating database: %w", err)
+	}
+
+	srv, err := server.New(version, log, database)
 	if err != nil {
 		return err
 	}

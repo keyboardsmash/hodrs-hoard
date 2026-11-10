@@ -9,6 +9,7 @@
     dl { display: grid; grid-template-columns: max-content 1fr; gap: .25rem 1rem; }
     dt { font-weight: 600; }
     .ok { color: #15803d; }
+    .error { color: #b91c1c; }
   </style>
 </head>
 <body>
@@ -16,7 +17,8 @@
   <p>Catalogue for physical and digital media. Nothing to browse yet.</p>
   <h2>Status</h2>
   <dl>
-    <dt>Health</dt><dd class="ok">{{.Health.Status}}</dd>
+    <dt>Health</dt><dd class="{{.Health.Status}}">{{.Health.Status}}</dd>
+    <dt>Database</dt><dd>{{.Health.Database}}</dd>
     <dt>Version</dt><dd>{{.Health.Version}}</dd>
     <dt>Uptime</dt><dd>{{.Health.Uptime}}</dd>
   </dl>

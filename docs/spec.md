@@ -14,8 +14,8 @@ Status markers used below:
 ## 1. Overview
 
 Höðrs Hoard is a self-hosted catalogue for physical and digital media. It
-replaces PHP4DVD (`legacy/`). It runs as a single Go binary, either as a
-server (PostgreSQL or SQLite) or as a desktop app (SQLite).
+replaces PHP4DVD (`legacy/`). It runs as a single Go binary with an SQLite
+database, either as a server or as a desktop app.
 
 ### 1.1 Goals
 
@@ -263,12 +263,28 @@ API keys come from configuration and are never committed.
   |-------------------|---------|----------------------------------------|
   | `HOARD_ADDR`      | `:8080` | Listen address, `host:port`            |
   | `HOARD_LOG_LEVEL` | `info`  | `debug`, `info`, `warn` or `error`     |
+  | `HOARD_DATA_DIR`  | per-user data folder, see below | Holds `hoard.db` (SQLite), later covers |
 
-- `GET /healthz` returns JSON (`status`, `version`, `uptime`) for monitoring
-  and container health checks.
-- Database: SQLite (default) or PostgreSQL, using the same code.
+- Default data folder: `$XDG_DATA_HOME/hodrs-hoard` (usually
+  `~/.local/share/hodrs-hoard`) on Linux, `~/Library/Application Support/hodrs-hoard`
+  on macOS. Suits the desktop version; servers and containers set
+  `HOARD_DATA_DIR` (for example `/data`). Everything the app stores lives
+  in this one folder, so backing it up is enough.
+- `GET /healthz` returns JSON (`status`, `version`, `uptime`, `database`)
+  for monitoring and container health checks. It answers 503 when the
+  database is unreachable.
+- **Decided:** database is SQLite only, for server and desktop alike, through
+  `database/sql` with `modernc.org/sqlite` (pure Go, no cgo). WAL mode and
+  foreign keys are on. Running several app instances against one shared
+  database is not supported.
+- Migrations: numbered SQL files in `internal/db/migrations/`, embedded in
+  the binary and applied at startup. Applied versions are recorded in
+  `schema_migrations`. hoard refuses to start on a database migrated by a
+  newer version.
 - Distribution: static binary (`hoard`), container image, AppImage. Wails v3
   desktop is the last milestone.
+- **Decided:** platforms are Linux and macOS. Windows is not supported: a
+  Windows build fails on purpose (`cmd/hoard/unsupported_windows.go`).
 
 ---
 
@@ -282,7 +298,13 @@ API keys come from configuration and are never committed.
 ## Appendix A. Milestones
 
 1. Skeleton: binary, configuration, HTTP server, health page.
-2. Database and migrations (SQLite and PostgreSQL), users and auth (section 2).
+2. Database and migrations (SQLite), users and auth (section 2).
+   - 2a. Database connection, migration runner, health check.
+   - 2b. Users, password hashing (argon2id), sessions, login/logout,
+     first-run admin setup, CSRF protection.
+   - 2c. User management: admin pages, own account page, forced password
+     change, anonymous browsing setting.
+   - 2d. "Remember me" tokens.
 3. Media types and items: create, list, edit and trash (sections 3–4,
    manual entry only).
 4. Covers.
@@ -307,3 +329,10 @@ API keys come from configuration and are never committed.
 | 2026-11-09 | Keep PHP4DVD fields: own, seen, favourite, loans, trailer, MPAA rating. |
 | 2026-11-09 | Users are disabled, never deleted, to keep edit history. |
 | 2026-11-09 | PHP4DVD users imported with a forced password change. |
+| 2026-11-09 | Passwords hashed with argon2id (`golang.org/x/crypto`). |
+| 2026-11-09 | PostgreSQL driver: pgx v5 via `database/sql`.         |
+| 2026-11-09 | Default data folder is the per-user data dir (desktop-friendly). |
+| 2026-11-09 | Milestone 2 split into 2a-2d; "remember me" is 2d.    |
+| 2026-11-09 | Windows not supported; Windows builds fail on purpose. |
+| 2026-11-10 | PostgreSQL support removed; SQLite only (replaces the pgx decision). Database is always `hoard.db` in the data folder. |
+| 2026-11-10 | Dependencies pinned by `go.mod`/`go.sum`; `vendor/` is not committed (the SQLite driver alone is ~140 MB vendored). |
