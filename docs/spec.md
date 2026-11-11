@@ -200,6 +200,8 @@ Initial (seeded) types:
 
 Only **title** and **media type** are required. An item that is missing
 key fields for its kind is "incomplete" and can be listed with a filter.
+**Decided:** an item is incomplete if it has no year, or (video) no
+runtime, or (book) no author.
 
 Common fields (all kinds):
 
@@ -208,7 +210,7 @@ Common fields (all kinds):
 | title          | Required                                    |
 | original_title | Title in the original language              |
 | alt_titles     | Other titles, one per line ("aka")         |
-| sort_title     | Derived ("The Matrix" → "Matrix, The"), editable |
+| sort_title     | Derived ("The Matrix" → "Matrix, The"), editable. **Decided:** only English articles (The, A, An) for now |
 | media_type     | Required                                    |
 | year           |                                             |
 | description    | Plot or synopsis, one text field            |
@@ -273,7 +275,8 @@ since a DVD has both, a Blu-ray only a region and a VHS tape only a
 standard.
 
 **Decided:** Keep all PHP4DVD fields to keep as-is: own, seen, favourite, loans
-(loaned/loandate/loanname), trailer, MPAA/PG rating.
+(loaned/loandate/loanname), trailer, MPAA/PG rating. PHP4DVD's `pg` is a
+minimum viewer age and becomes `age_limit`; `mpaa` is the certificate text.
 
 ### 3.3 Identifiers
 
@@ -305,11 +308,16 @@ Stored in a separate table: `(item_id, type, value)`.
 - Statuses: `active` (default), `hidden` (not shown in normal lists),
   `trashed`.
 - No hard delete, except by emptying the trash (admins only).
+- **Decided:** hidden items are only visible to editors and admins, through
+  the status filter. Viewers and anonymous visitors never see them.
 
 ### 3.7 Manual edits vs. metadata refresh
 
 - Each field records whether a user edited it by hand.
 - A metadata refresh never overwrites a hand-edited field.
+- **Decided:** deferred to milestone 6 (metadata providers). Until then
+  every field is entered by hand anyway. Data imported from PHP4DVD
+  counts as not hand-edited.
 
 ---
 
@@ -321,6 +329,10 @@ Stored in a separate table: `(item_id, type, value)`.
   succeeding.
 - Barcode input: a USB scanner acting as a keyboard, typing into the lookup
   box.
+- **Decided:** credits are entered in one text box per role, one name per
+  line, in order. Genres are comma-separated text. Names are matched to
+  existing people and genres ignoring case; new ones are created as
+  needed. **Later:** autocomplete.
 - **Later:** online barcode lookup through pluggable providers.
 
 ---
@@ -418,6 +430,11 @@ API keys come from configuration and are never committed.
    - 2d. "Remember me" tokens.
 3. Media types and items: create, list, edit and trash (sections 3–4,
    manual entry only).
+   - 3a. Schema and item store: media types, items, credits, genres,
+     identifiers with normalisation, filters, sorting and paging.
+   - 3b. Media type page, item add/edit/view forms, hide/trash/restore,
+     trash page.
+   - 3c. Library page: list and grid views, filters, search, paging; htmx.
 4. Covers.
 5. PHP4DVD importer.
 6. Metadata providers.
@@ -488,3 +505,9 @@ Draft; finalised with the importer milestone.
 | 2026-11-11 | Countries: multi-value field on all kinds. |
 | 2026-11-11 | Audio and video format: free-text fields on video items. |
 | 2026-11-11 | Media-type menus are grouped by kind. |
+| 2026-11-11 | Incomplete = no year, or no runtime (video), or no author (book). |
+| 2026-11-11 | Hidden items are visible to editors and admins only. |
+| 2026-11-11 | sort_title moves English articles only (The, A, An) for now. |
+| 2026-11-11 | Credits: one text box per role, one name per line; genres comma-separated. |
+| 2026-11-11 | Hand-edit tracking (3.7) deferred to milestone 6. |
+| 2026-11-11 | htmx 2.x is vendored as one committed file, served from the binary. |
