@@ -184,15 +184,15 @@ Initial (seeded) types:
 |------------|-------|----------|--------------------------------|
 | DVD        | video | yes      |                                |
 | VHS        | video | yes      |                                |
-| Book       | book  | yes      | Hardcover/paperback: **Open**  |
+| Book       | book  | yes      | Binding is a field (see 3.2)   |
 | Ebook      | book  | no       | File format: EPUB or PDF       |
 
 - Users (editors and admins) can add their own media types by choosing a
   name and a kind. Seeded types can be renamed but not deleted while items
   use them.
 - **Later:** seed Blu-ray, 3D Blu-ray, 4K UHD and audio (CD, vinyl).
-- **Open:** should physical book bindings (hardcover/paperback) be separate
-  media types or a field on the item?
+- **Decided:** book bindings (hardcover/paperback) are a field on the item,
+  not separate media types.
 - Option to group media types by kind. 
 
 ### 3.2 Item fields
@@ -218,6 +218,8 @@ Common fields (all kinds):
 | added_by       | auto, user who created the item             |
 | updated_by     | auto, user who last edited the item         |
 | parent_id      | For box sets (see 3.4)                      |
+| series         | Series name, autocompletes from existing names |
+| series_number  | Position in the series, text ("12", "1.5", "III") |
 
 Video fields (DVD, VHS):
 
@@ -228,7 +230,8 @@ Video fields (DVD, VHS):
 | cast      | People, many-to-many, with order          |
 | languages | Audio languages                           |
 | subtitles |                                           |
-| region    | DVD region code / VHS PAL/NTSC: **Open**  |
+| region    | Free text, suggestions per media type: DVD 0–8, Blu-ray A/B/C, "region free" |
+| video_standard | PAL, NTSC, SECAM or empty           |
 
 Book fields (Book, Ebook):
 
@@ -238,8 +241,16 @@ Book fields (Book, Ebook):
 | publisher |                                  |
 | pages     |                                  |
 | language  |                                  |
-| series    | Name and number: **Open**        |
+| binding   | Physical books: hardcover, paperback, other or empty |
 | file      | Ebook only: path or uploaded file, format (EPUB/PDF) |
+
+**Decided:** series are two optional fields on every item, for all kinds
+(book series and film series alike), not a separate table. Lists can sort
+by series and then number.
+
+**Decided:** region and video standard are two separate optional fields,
+since a DVD has both, a Blu-ray only a region and a VHS tape only a
+standard.
 
 **Decided:** Keep all PHP4DVD fields to keep as-is: own, seen, favourite, loans
 (loaned/loandate/loanname), trailer, MPAA/PG rating.
@@ -296,9 +307,17 @@ Stored in a separate table: `(item_id, type, value)`.
 
 ## 5. Browsing and search
 
-- **Open:** list and grid views, sorting (title, year, added, media type),
-  filters (media type, kind, genre, status, incomplete), and free-text
-  search. Use PHP4DVD's search page as the baseline.
+- **Decided** (baseline for milestone 3, from PHP4DVD's search page):
+  - Views: a table list and a grid. Until covers exist (milestone 4) the
+    grid shows placeholders.
+  - Sorting: title (by sort title), year, date added, media type and
+    series; ascending or descending.
+  - Filters: media type, kind, genre, status, incomplete, and own, seen,
+    favourite, loaned.
+  - Free-text search across title, original title, people and notes,
+    using simple `LIKE` matching. **Later:** SQLite full-text search
+    (FTS5) if it gets slow or word stemming is needed.
+  - 50 items per page.
 
 ---
 
@@ -417,3 +436,7 @@ API keys come from configuration and are never committed.
 | 2026-11-10 | Plain HTML forms for user pages; htmx arrives with milestone 3. |
 | 2026-11-10 | "Remember me": 30 days, sliding expiry, separate hashed token, no rotation. |
 | 2026-11-10 | "Log out everywhere" button on the account page. |
+| 2026-11-10 | Book binding is an item field, not separate media types. |
+| 2026-11-10 | Region and video standard (PAL/NTSC/SECAM) are two optional fields. |
+| 2026-11-10 | Series: name and number fields on every item, all kinds. |
+| 2026-11-10 | Browsing baseline: list and grid, LIKE search, 50 per page. |
