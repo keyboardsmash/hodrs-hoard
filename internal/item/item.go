@@ -257,12 +257,25 @@ func (s *Store) Create(ctx context.Context, userID int64, it *Item) (int64, erro
 }
 
 // Update validates and saves changes to an existing item. Status, added_*
-// and parent are not changed here (see SetStatus).
+// and parent are not changed here (see SetStatus). The media type may
+// change, but only to one of the same kind (spec 3.1).
 func (s *Store) Update(ctx context.Context, userID int64, it *Item) error {
 	return s.inTx(ctx, func(tx *sql.Tx) error {
+		var oldKind Kind
+		err := tx.QueryRowContext(ctx, `SELECT m.kind FROM items i JOIN media_types m ON m.id = i.media_type_id
+			WHERE i.id = ?`, it.ID).Scan(&oldKind)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
 		mt, err := s.prepare(ctx, tx, it)
 		if err != nil {
 			return err
+		}
+		if mt.Kind != oldKind {
+			return FieldErrors{"media_type": "An item can't change to a media type of another kind."}
 		}
 		cols, vals := itemColumns(it, mt)
 		cols = append(cols, "updated_at", "updated_by")
@@ -287,7 +300,7 @@ func (s *Store) Update(ctx context.Context, userID int64, it *Item) error {
 
 // prepare cleans and validates it in place and returns its media type.
 func (s *Store) prepare(ctx context.Context, tx *sql.Tx, it *Item) (*MediaType, error) {
-	errs := clean(it)
+	errs := Clean(it)
 	mt, err := mediaTypeByID(ctx, tx, it.MediaTypeID)
 	switch {
 	case errors.Is(err, ErrNotFound):
@@ -310,8 +323,11 @@ func (s *Store) prepare(ctx context.Context, tx *sql.Tx, it *Item) (*MediaType, 
 	return mt, nil
 }
 
-// clean trims and normalises every field of it and returns what is wrong.
-func clean(it *Item) FieldErrors {
+// Clean trims and normalises every field of it in place and returns what
+// is wrong. Create and Update call it; handlers can call it too, to show
+// all problems at once alongside their own (such as "not a number").
+// Checks that need the database (media type, parent) are not done here.
+func Clean(it *Item) FieldErrors {
 	errs := FieldErrors{}
 	line := func(field string, p *string) {
 		*p = cleanText(*p)

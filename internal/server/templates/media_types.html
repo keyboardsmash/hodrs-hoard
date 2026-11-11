@@ -1,0 +1,48 @@
+{{define "content"}}
+  <h2>Media types</h2>
+  {{with .Error}}<p class="error">{{.}}</p>{{end}}
+  {{$types := .MediaTypes}}
+  {{range .Kinds}}{{$kind := .}}
+    <h3>{{.Label}}</h3>
+    <table>
+      <thead><tr><th>Name</th><th>Physical</th><th>Items</th><th></th></tr></thead>
+      <tbody>
+      {{range $types}}{{if eq .Kind $kind}}
+        <tr>
+          <td>
+            <form method="post" action="/media-types/{{.ID}}/rename">
+              <input name="name" value="{{.Name}}" aria-label="Name of {{.Name}}" required maxlength="64">
+              <button type="submit">Rename</button>
+            </form>
+          </td>
+          <td>{{if .Physical}}yes{{else}}no{{end}}</td>
+          <td>{{itemCount .Items}}</td>
+          <td>
+            {{if eq .Items 0}}
+            <form method="post" action="/media-types/{{.ID}}/delete" onsubmit="return confirm('Delete {{.Name}}?')">
+              <button type="submit">Delete</button>
+            </form>
+            {{end}}
+          </td>
+        </tr>
+      {{end}}{{end}}
+      </tbody>
+    </table>
+  {{end}}
+
+  <section>
+    <h3>Add a media type</h3>
+    <p class="hint">The kind decides which fields items of this type have. It can't be changed later.</p>
+    <form class="stacked" method="post" action="/media-types">
+      <label for="name">Name</label>
+      <input id="name" name="name" value="{{.Form.Name}}" required maxlength="64">
+      <label for="kind">Kind</label>
+      <select id="kind" name="kind">
+        {{$cur := .Form.Kind}}
+        {{range .Kinds}}<option value="{{.}}"{{if eq . $cur}} selected{{end}}>{{.Label}}</option>{{end}}
+      </select>
+      <label class="check"><input type="checkbox" name="physical"{{if .Form.Physical}} checked{{end}}> Physical (not a file)</label>
+      <button type="submit">Add media type</button>
+    </form>
+  </section>
+{{end}}

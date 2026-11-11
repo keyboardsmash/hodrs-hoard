@@ -1,0 +1,18 @@
+{{define "content"}}
+  <h2>Trash</h2>
+  {{if .Page.Items}}
+    <p class="hint">Trashed items are only visible here. Open one to restore it.</p>
+    {{template "item-table" .}}
+    {{if and .User (.User.Can "admin")}}
+    <section>
+      <h3>Empty the trash</h3>
+      <p class="hint">Deletes all {{.Page.Total}} trashed items for good. This can't be undone.</p>
+      <form method="post" action="/trash/empty" onsubmit="return confirm('Delete all trashed items for good?')">
+        <button type="submit">Empty trash</button>
+      </form>
+    </section>
+    {{end}}
+  {{else}}
+    <p>The trash is empty.</p>
+  {{end}}
+{{end}}

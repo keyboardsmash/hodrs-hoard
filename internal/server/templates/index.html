@@ -1,11 +1,8 @@
 {{define "content"}}
-  <p>Catalogue for physical and digital media. Nothing to browse yet.</p>
-  <h2>Status</h2>
-  <dl>
-    <dt>Health</dt><dd class="{{.Health.Status}}">{{.Health.Status}}</dd>
-    <dt>Database</dt><dd>{{.Health.Database}}</dd>
-    <dt>Version</dt><dd>{{.Health.Version}}</dd>
-    <dt>Uptime</dt><dd>{{.Health.Uptime}}</dd>
-  </dl>
-  <p><a href="/healthz">/healthz</a> (JSON)</p>
+  {{if .Page.Items}}
+    <h2>Recently added</h2>
+    {{template "item-table" .}}
+  {{else}}
+    <p>The library is empty.{{if .CanEdit}} <a href="/items/new">Add the first item</a>.{{end}}</p>
+  {{end}}
 {{end}}

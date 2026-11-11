@@ -1,0 +1,265 @@
+{{define "content"}}
+  {{$f := .ItemForm}}{{$e := .FieldErrors}}{{$mt := .MediaType}}
+  {{$video := eq $mt.Kind "video"}}
+  {{if .Item}}
+    <p><a href="/items/{{.Item.ID}}">← {{.Item.Title}}</a></p>
+    <h2>Edit {{.Item.Title}}</h2>
+  {{else}}
+    <p><a href="/items/new">← Choose another type</a></p>
+    <h2>Add {{$mt.Name}}</h2>
+  {{end}}
+  {{with .Error}}<p class="error">{{.}}{{range $.OtherErrors}}<br>{{.}}{{end}}</p>{{end}}
+
+  <form class="stacked" method="post" action="{{if .Item}}/items/{{.Item.ID}}/edit{{else}}/items/new{{end}}">
+    <fieldset>
+      <legend>Basics</legend>
+      <div class="row">
+        <div>
+          <label for="title">Title</label>
+          <input id="title" name="title" value="{{$f.Title}}" required maxlength="500" autofocus>
+          {{template "ferr" index $e "title"}}
+        </div>
+        <div>
+          <label for="media_type">Media type</label>
+          <select id="media_type" name="media_type">
+            {{range .MediaTypes}}<option value="{{.ID}}"{{if eq .ID $f.MediaTypeID}} selected{{end}}>{{.Name}}</option>{{end}}
+          </select>
+          {{template "ferr" index $e "media_type"}}
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label for="original_title">Original title <span class="hint">(optional)</span></label>
+          <input id="original_title" name="original_title" value="{{$f.OriginalTitle}}" maxlength="500">
+          {{template "ferr" index $e "original_title"}}
+        </div>
+        <div>
+          <label for="sort_title">Sort title <span class="hint">(empty: derived from the title)</span></label>
+          <input id="sort_title" name="sort_title" value="{{$f.SortTitle}}" maxlength="500"
+                 placeholder="{{with .Item}}{{.EffectiveSortTitle}}{{end}}">
+          {{template "ferr" index $e "sort_title"}}
+        </div>
+      </div>
+      <label for="alt_titles">Other titles <span class="hint">(one per line)</span></label>
+      <textarea id="alt_titles" name="alt_titles" rows="2">{{$f.AltTitles}}</textarea>
+      {{template "ferr" index $e "alt_titles"}}
+      <div class="row">
+        <div>
+          <label for="year">Year</label>
+          <input id="year" name="year" value="{{$f.Year}}" class="short" inputmode="numeric">
+          {{template "ferr" index $e "year"}}
+        </div>
+        <div>
+          <label for="series">Series</label>
+          <input id="series" name="series" value="{{$f.Series}}" list="series-names" maxlength="500">
+          <datalist id="series-names">{{range .SeriesNames}}<option value="{{.}}">{{end}}</datalist>
+          {{template "ferr" index $e "series"}}
+        </div>
+        <div>
+          <label for="series_number">Number in series</label>
+          <input id="series_number" name="series_number" value="{{$f.SeriesNumber}}" class="short">
+          {{template "ferr" index $e "series_number"}}
+        </div>
+      </div>
+      <label for="genres">Genres <span class="hint">(comma-separated)</span></label>
+      <input id="genres" name="genres" value="{{$f.Genres}}">
+      {{template "ferr" index $e "genres"}}
+      <label for="description">Description</label>
+      <textarea id="description" name="description" rows="5">{{$f.Description}}</textarea>
+      {{template "ferr" index $e "description"}}
+    </fieldset>
+
+    <fieldset>
+      <legend>People <span class="hint">(one name per line, in order)</span></legend>
+      <div class="row">
+      {{range .CreditRoles}}
+        <div>
+          <label for="credit_{{.}}">{{roleLabel .}}</label>
+          <textarea id="credit_{{.}}" name="credit_{{.}}" rows="{{if eq . "cast"}}6{{else}}2{{end}}">{{mapGet $f.Credits .}}</textarea>
+          {{template "ferr" index $e .}}
+        </div>
+      {{end}}
+      </div>
+    </fieldset>
+
+    {{if $video}}
+    <fieldset>
+      <legend>Video details</legend>
+      <div class="row">
+        <div>
+          <label for="runtime">Runtime <span class="hint">(minutes)</span></label>
+          <input id="runtime" name="runtime" value="{{$f.Runtime}}" class="short" inputmode="numeric">
+          {{template "ferr" index $e "runtime"}}
+        </div>
+        <div>
+          <label for="region">Region</label>
+          <input id="region" name="region" value="{{$f.Region}}" list="regions" class="short">
+          <datalist id="regions">
+            {{/* DVD regions 0–8, Blu-ray A–C */}}
+            <option value="0"><option value="1"><option value="2"><option value="3"><option value="4">
+            <option value="5"><option value="6"><option value="7"><option value="8">
+            <option value="A"><option value="B"><option value="C"><option value="region free">
+          </datalist>
+          {{template "ferr" index $e "region"}}
+        </div>
+        <div>
+          <label for="video_standard">Video standard</label>
+          <select id="video_standard" name="video_standard">
+            <option value="">–</option>
+            {{range .Choices.VideoStandards}}<option{{if eq . $f.VideoStandard}} selected{{end}}>{{.}}</option>{{end}}
+          </select>
+          {{template "ferr" index $e "video_standard"}}
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label class="check"><input type="checkbox" name="is_tv"{{if $f.IsTV}} checked{{end}}> TV series</label>
+        </div>
+        <div>
+          <label for="seasons">Seasons <span class="hint">(e.g. 1–3)</span></label>
+          <input id="seasons" name="seasons" value="{{$f.Seasons}}" class="short">
+          {{template "ferr" index $e "seasons"}}
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label for="audio_format">Audio</label>
+          <input id="audio_format" name="audio_format" value="{{$f.AudioFormat}}" placeholder="Dolby Digital 5.1">
+          {{template "ferr" index $e "audio_format"}}
+        </div>
+        <div>
+          <label for="video_format">Picture</label>
+          <input id="video_format" name="video_format" value="{{$f.VideoFormat}}" placeholder="16:9 anamorphic">
+          {{template "ferr" index $e "video_format"}}
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label for="languages">Audio languages <span class="hint">(comma-separated)</span></label>
+          <input id="languages" name="languages" value="{{$f.Languages}}">
+          {{template "ferr" index $e "languages"}}
+        </div>
+        <div>
+          <label for="subtitles">Subtitles <span class="hint">(comma-separated)</span></label>
+          <input id="subtitles" name="subtitles" value="{{$f.Subtitles}}">
+          {{template "ferr" index $e "subtitles"}}
+        </div>
+      </div>
+    </fieldset>
+    {{else}}
+    <fieldset>
+      <legend>Book details</legend>
+      <div class="row">
+        <div>
+          <label for="publisher">Publisher</label>
+          <input id="publisher" name="publisher" value="{{$f.Publisher}}">
+          {{template "ferr" index $e "publisher"}}
+        </div>
+        <div>
+          <label for="pages">Pages</label>
+          <input id="pages" name="pages" value="{{$f.Pages}}" class="short" inputmode="numeric">
+          {{template "ferr" index $e "pages"}}
+        </div>
+        <div>
+          <label for="languages">Language</label>
+          <input id="languages" name="languages" value="{{$f.Languages}}">
+          {{template "ferr" index $e "languages"}}
+        </div>
+      </div>
+      {{if $mt.Physical}}
+        <label for="binding">Binding</label>
+        <select id="binding" name="binding">
+          <option value="">–</option>
+          {{range .Choices.Bindings}}<option{{if eq . $f.Binding}} selected{{end}}>{{.}}</option>{{end}}
+        </select>
+        {{template "ferr" index $e "binding"}}
+      {{else}}
+        <div class="row">
+          <div>
+            <label for="file_format">File format</label>
+            <select id="file_format" name="file_format">
+              <option value="">–</option>
+              {{range .Choices.FileFormats}}<option{{if eq . $f.FileFormat}} selected{{end}}>{{.}}</option>{{end}}
+            </select>
+            {{template "ferr" index $e "file_format"}}
+          </div>
+          <div>
+            <label for="file_path">File location</label>
+            <input id="file_path" name="file_path" value="{{$f.FilePath}}">
+            {{template "ferr" index $e "file_path"}}
+          </div>
+        </div>
+      {{end}}
+    </fieldset>
+    {{end}}
+
+    <fieldset>
+      <legend>Identifiers <span class="hint">(several: separate with commas)</span></legend>
+      <div class="row">
+      {{range .IDTypes}}
+        <div>
+          <label for="id_{{.}}">{{idLabel .}}</label>
+          <input id="id_{{.}}" name="id_{{.}}" value="{{mapGet $f.Identifiers .}}">
+          {{template "ferr" index $e (print "identifier_" .)}}
+        </div>
+      {{end}}
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Your collection</legend>
+      <div class="row">
+        <div><label class="check"><input type="checkbox" name="own"{{if $f.Own}} checked{{end}}> Own it</label></div>
+        <div><label class="check"><input type="checkbox" name="seen"{{if $f.Seen}} checked{{end}}> {{if $video}}Seen{{else}}Read{{end}} it</label></div>
+        <div><label class="check"><input type="checkbox" name="favourite"{{if $f.Favourite}} checked{{end}}> Favourite</label></div>
+        <div>
+          <label for="own_rating">Your rating <span class="hint">(1–10)</span></label>
+          <input id="own_rating" name="own_rating" value="{{$f.OwnRating}}" class="short" inputmode="numeric">
+          {{template "ferr" index $e "own_rating"}}
+        </div>
+      </div>
+      <label class="check"><input type="checkbox" name="loaned"{{if $f.Loaned}} checked{{end}}> Loaned out</label>
+      <div class="row">
+        <div>
+          <label for="loaned_to">To</label>
+          <input id="loaned_to" name="loaned_to" value="{{$f.LoanedTo}}">
+          {{template "ferr" index $e "loaned_to"}}
+        </div>
+        <div>
+          <label for="loaned_on">Since</label>
+          <input id="loaned_on" name="loaned_on" type="date" value="{{$f.LoanedOn}}">
+          {{template "ferr" index $e "loaned_on"}}
+        </div>
+      </div>
+      <label for="notes">Notes <span class="hint">(not shown to anonymous visitors)</span></label>
+      <textarea id="notes" name="notes" rows="3">{{$f.Notes}}</textarea>
+      {{template "ferr" index $e "notes"}}
+    </fieldset>
+
+    <fieldset>
+      <legend>More</legend>
+      <div class="row">
+        <div>
+          <label for="countries">Countries <span class="hint">(comma-separated)</span></label>
+          <input id="countries" name="countries" value="{{$f.Countries}}">
+          {{template "ferr" index $e "countries"}}
+        </div>
+        <div>
+          <label for="mpaa">Certificate <span class="hint">(e.g. PG-13)</span></label>
+          <input id="mpaa" name="mpaa" value="{{$f.MPAA}}" class="short">
+          {{template "ferr" index $e "mpaa"}}
+        </div>
+        <div>
+          <label for="age_limit">Age limit <span class="hint">(0–21)</span></label>
+          <input id="age_limit" name="age_limit" value="{{$f.AgeLimit}}" class="short" inputmode="numeric">
+          {{template "ferr" index $e "age_limit"}}
+        </div>
+      </div>
+      <label for="trailer">Trailer link</label>
+      <input id="trailer" name="trailer" type="url" value="{{$f.Trailer}}" placeholder="https://">
+      {{template "ferr" index $e "trailer"}}
+    </fieldset>
+
+    <button type="submit">{{if .Item}}Save changes{{else}}Add {{$mt.Name}}{{end}}</button>
+  </form>
+{{end}}

@@ -223,6 +223,19 @@ func TestUpdate(t *testing.T) {
 		t.Errorf("audit fields: added %v by %d, updated %v by %d", got.AddedAt, got.AddedBy, got.UpdatedAt, got.UpdatedBy)
 	}
 
+	// Same kind: allowed. Another kind: refused.
+	it.MediaTypeID = vhs
+	if err := s.Update(ctx, 0, it); err != nil {
+		t.Errorf("DVD to VHS: %v", err)
+	}
+	it.MediaTypeID = book
+	if err := s.Update(ctx, 0, it); fieldErr(err, "media_type") == "" {
+		t.Errorf("DVD to Book = %v, want a media_type error", err)
+	}
+	if got := mustGet(t, s, id); got.MediaTypeID != vhs {
+		t.Errorf("media type = %d after refused change, want VHS", got.MediaTypeID)
+	}
+
 	it.ID = 999
 	if err := s.Update(ctx, 0, it); !errors.Is(err, ErrNotFound) {
 		t.Errorf("Update(missing) = %v, want ErrNotFound", err)

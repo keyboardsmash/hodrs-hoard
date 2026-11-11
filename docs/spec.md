@@ -193,6 +193,8 @@ Initial (seeded) types:
 - **Later:** seed Blu-ray, 3D Blu-ray, 4K UHD and audio (CD, vinyl).
 - **Decided:** book bindings (hardcover/paperback) are a field on the item,
   not separate media types.
+- **Decided:** an item's media type can be changed to another type of the
+  same kind (DVD → VHS, Book → Ebook), never to another kind.
 - Media-type menus (add form, filters) group the types under their kind
   (Video, Book).
 
@@ -217,7 +219,7 @@ Common fields (all kinds):
 | credits        | People with a role and order (see below)    |
 | countries      | Production countries, several               |
 | genres         | Many-to-many                                |
-| notes          | Free text, private                          |
+| notes          | Free text; hidden from anonymous visitors   |
 | own_rating     | Your own rating, 1–10, empty = unrated      |
 | cover          | See 3.5                                     |
 | status         | active / hidden / trashed                   |
@@ -277,6 +279,8 @@ standard.
 **Decided:** Keep all PHP4DVD fields to keep as-is: own, seen, favourite, loans
 (loaned/loandate/loanname), trailer, MPAA/PG rating. PHP4DVD's `pg` is a
 minimum viewer age and becomes `age_limit`; `mpaa` is the certificate text.
+Loan details (who and since when) are hidden from anonymous visitors, like
+notes.
 
 ### 3.3 Identifiers
 
@@ -329,6 +333,11 @@ Stored in a separate table: `(item_id, type, value)`.
   succeeding.
 - Barcode input: a USB scanner acting as a keyboard, typing into the lookup
   box.
+- **Decided:** adding starts by choosing the media type; the form then
+  shows the fields for its kind. **Later:** remember the last type used,
+  or offer "add another of this type" after saving.
+- **Decided:** one input per identifier type; several values are separated
+  by commas.
 - **Decided:** credits are entered in one text box per role, one name per
   line, in order. Genres are comma-separated text. Names are matched to
   existing people and genres ignoring case; new ones are created as
@@ -511,3 +520,7 @@ Draft; finalised with the importer milestone.
 | 2026-11-11 | Credits: one text box per role, one name per line; genres comma-separated. |
 | 2026-11-11 | Hand-edit tracking (3.7) deferred to milestone 6. |
 | 2026-11-11 | htmx 2.x is vendored as one committed file, served from the binary. |
+| 2026-11-11 | Adding starts by choosing the media type. Later: remember last type / "add another". |
+| 2026-11-11 | An item's media type can't change to another kind. |
+| 2026-11-11 | Notes and loan details are hidden from anonymous visitors. |
+| 2026-11-11 | Several identifiers of one type: comma-separated in one input. |

@@ -1,0 +1,14 @@
+{{define "content"}}
+  <h2>Add item</h2>
+  <p>What kind of item?</p>
+  {{$types := .MediaTypes}}
+  {{range .Kinds}}{{$kind := .}}
+    <h3>{{.Label}}</h3>
+    <ul>
+      {{range $types}}{{if eq .Kind $kind}}
+        <li><a href="/items/new?type={{.ID}}">{{.Name}}</a></li>
+      {{end}}{{end}}
+    </ul>
+  {{end}}
+  {{if .CanEdit}}<p class="hint">Missing a type? Add it under <a href="/media-types">Media types</a>.</p>{{end}}
+{{end}}

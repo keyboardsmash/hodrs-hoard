@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/keyboardsmash/hodrs-hoard/internal/item"
 	"github.com/keyboardsmash/hodrs-hoard/internal/user"
 )
 
@@ -48,17 +49,42 @@ func TestEveryPageRenders(t *testing.T) {
 	a := newAppWithUser(t, "alice", user.RoleAdmin)
 	me, _ := a.s.users.ByUsername(context.Background(), "alice")
 	other := a.addUser("bob", user.RoleViewer)
-	for _, page := range pages {
-		for _, target := range []*user.User{me, other} {
+	ctx := context.Background()
+	video := a.addFullItem(1) // DVD
+	book := a.addFullItem(3)  // Book
+	ebook := a.addFullItem(4) // Ebook: not physical
+	types, _ := a.s.items.MediaTypes(ctx)
+	page, _ := a.s.items.List(ctx, item.Query{})
+	dups, _ := a.s.items.Duplicates(ctx, video.ID)
+	if len(dups) == 0 {
+		t.Fatal("test data should have duplicates")
+	}
+
+	for _, pg := range pages {
+		for i, it := range []*item.Item{video, book, ebook} {
+			target := []*user.User{me, other, me}[i]
 			req := httptest.NewRequest("GET", "/", nil)
 			req = req.WithContext(context.WithValue(req.Context(), userKey, me))
 			rec := httptest.NewRecorder()
-			a.s.render(rec, req, http.StatusOK, page, pageData{
+			kind := it.MediaType.Kind
+			a.s.render(rec, req, http.StatusOK, pg, pageData{
 				Title: "x", Target: target, Users: []*user.User{me, other},
-				Form: formValues{Role: user.RoleEditor},
+				Form:        formValues{Role: user.RoleEditor, Kind: kind},
+				Item:        it,
+				MediaType:   it.MediaType,
+				MediaTypes:  types,
+				ItemForm:    itemFormFrom(it),
+				FieldErrors: item.FieldErrors{"title": "bad", "identifier_isbn": "bad"},
+				OtherErrors: []string{"other"},
+				CreditRoles: item.RolesFor(kind),
+				IDTypes:     identifierTypes(kind, it),
+				SeriesNames: []string{"Saga"},
+				Duplicates:  dups,
+				Page:        page,
+				AddedBy:     "alice",
 			})
 			if rec.Code != http.StatusOK {
-				t.Errorf("%s (target %s): status %d", page, target.Username, rec.Code)
+				t.Errorf("%s (%s): status %d: %s", pg, it.MediaType.Name, rec.Code, rec.Body)
 			}
 		}
 	}

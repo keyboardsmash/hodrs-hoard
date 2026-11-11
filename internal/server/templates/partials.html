@@ -7,3 +7,26 @@
       {{range .Roles}}<option value="{{.}}"{{if eq . $current}} selected{{end}}>{{.}}</option>{{end}}
     </select>
 {{end}}
+
+{{/* A field's error message, if any: {{template "ferr" index $.FieldErrors "title"}} */}}
+{{define "ferr"}}{{with .}}<span class="field-error">{{.}}</span>{{end}}{{end}}
+
+{{/* A table of item summaries (.Page). Used by the start page and the trash. */}}
+{{define "item-table"}}
+  {{if .Page.Items}}
+  <table>
+    <thead><tr><th>Title</th><th>Year</th><th>Type</th><th>By</th></tr></thead>
+    <tbody>
+    {{range .Page.Items}}
+      <tr>
+        <td><a href="/items/{{.ID}}">{{.Title}}</a>{{if .Series}} <span class="muted">({{.Series}}{{with .SeriesNumber}} {{.}}{{end}})</span>{{end}}</td>
+        <td>{{with .Year}}{{.}}{{end}}</td>
+        <td>{{.MediaType}}</td>
+        <td>{{join .People ", "}}</td>
+      </tr>
+    {{end}}
+    </tbody>
+  </table>
+  {{if gt .Page.Pages 1}}<p class="muted">Page {{.Page.Page}} of {{.Page.Pages}} · {{.Page.Total}} items</p>{{end}}
+  {{end}}
+{{end}}

@@ -27,6 +27,8 @@ const (
 	SortAdded     = "added"
 	SortMediaType = "media_type"
 	SortSeries    = "series"
+	// SortTrashed is for the trash page; it isn't offered in Sorts.
+	SortTrashed = "trashed"
 )
 
 // Sorts lists the sort orders in menu order.
@@ -41,6 +43,7 @@ var sortSQL = map[string]string{
 	SortAdded: "i.added_at {dir}, i.id {dir}",
 	// Grouped by kind first, as in the menus (see MediaTypes).
 	SortMediaType: kindOrder + " {dir}, m.sort_order {dir}, m.name_key {dir}, i.sort_key, i.id",
+	SortTrashed: "i.trashed_at {dir}, i.id {dir}",
 	// Series numbers are text ("1.5", "III"); sort numerically where they
 	// are numbers, then as text.
 	SortSeries: "i.series_key {dir} NULLS LAST, CAST(i.series_number AS REAL) {dir}, i.series_number {dir}, i.sort_key, i.id",

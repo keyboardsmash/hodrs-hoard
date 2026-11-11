@@ -11,10 +11,12 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/keyboardsmash/hodrs-hoard/internal/auth"
+	"github.com/keyboardsmash/hodrs-hoard/internal/item"
 	"github.com/keyboardsmash/hodrs-hoard/internal/settings"
 	"github.com/keyboardsmash/hodrs-hoard/internal/user"
 )
@@ -34,6 +36,20 @@ var pages = []string{
 	"index.html", "login.html", "setup.html", "error.html",
 	"account.html", "password.html",
 	"admin_users.html", "admin_user_new.html", "admin_user.html", "admin_settings.html",
+	"media_types.html", "item_new.html", "item_form.html", "item.html", "trash.html",
+}
+
+// templateFuncs are extra functions templates can call, e.g.
+// {{roleLabel "cast"}}. They must be registered before parsing.
+var templateFuncs = template.FuncMap{
+	"roleLabel": func(role string) string { return label(roleLabels, role) },
+	"idLabel":   func(t string) string { return label(identifierLabels, t) },
+	"idURL":     identifierURL,
+	"join":      strings.Join,
+	"itemCount": itemCount,
+	"dateTime":  func(t time.Time) string { return t.Format("2006-01-02 15:04") },
+	"mapGet":    func(m map[string]string, k string) string { return m[k] },
+	"add":       func(a, b int) int { return a + b },
 }
 
 // Server holds what the HTTP handlers need.
@@ -46,6 +62,7 @@ type Server struct {
 	sessions  *auth.Sessions
 	remember  *auth.RememberTokens
 	settings  *settings.Store
+	items     *item.Store
 	templates map[string]*template.Template
 
 	// anonymous mirrors the anonymous browsing setting. It's read on every
@@ -66,7 +83,9 @@ type Server struct {
 func New(ctx context.Context, version string, log *slog.Logger, db *sql.DB) (*Server, error) {
 	tmpl := make(map[string]*template.Template, len(pages))
 	for _, p := range pages {
-		t, err := template.ParseFS(templateFS, "templates/layout.html", "templates/partials.html", "templates/"+p)
+		// template.New("").Funcs(...) makes an empty template set that knows
+		// our functions; ParseFS then adds the files to it.
+		t, err := template.New("").Funcs(templateFuncs).ParseFS(templateFS, "templates/layout.html", "templates/partials.html", "templates/"+p)
 		if err != nil {
 			return nil, err
 		}
@@ -82,6 +101,7 @@ func New(ctx context.Context, version string, log *slog.Logger, db *sql.DB) (*Se
 		sessions:  auth.NewSessions(db),
 		remember:  auth.NewRememberTokens(db),
 		settings:  settings.NewStore(db),
+		items:     item.NewStore(db),
 		templates: tmpl,
 	}
 
@@ -123,6 +143,7 @@ func (s *Server) Handler() http.Handler {
 
 	// Read-only pages: logged-in users, and anonymous visitors when allowed.
 	mux.Handle("GET /{$}", s.browse(s.handleIndex))
+	mux.Handle("GET /items/{id}", s.browse(s.handleItem))
 
 	// Own account: any logged-in user.
 	viewer := func(h http.HandlerFunc) http.Handler { return s.requireRole(user.RoleViewer, h) }
@@ -131,6 +152,22 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /account/password", viewer(s.handlePasswordForm))
 	mux.Handle("POST /account/password", viewer(s.handlePassword))
 	mux.Handle("POST /account/logout-everywhere", viewer(s.handleLogoutEverywhere))
+
+	// Changing the library: editors and admins.
+	editor := func(h http.HandlerFunc) http.Handler { return s.requireRole(user.RoleEditor, h) }
+	mux.Handle("GET /items/new", editor(s.handleItemNew))
+	mux.Handle("POST /items/new", editor(s.handleItemCreate))
+	mux.Handle("GET /items/{id}/edit", editor(s.handleItemEditForm))
+	mux.Handle("POST /items/{id}/edit", editor(s.handleItemEdit))
+	mux.Handle("POST /items/{id}/hide", editor(s.handleItemStatus(item.StatusHidden, "hidden")))
+	mux.Handle("POST /items/{id}/unhide", editor(s.handleItemStatus(item.StatusActive, "unhidden")))
+	mux.Handle("POST /items/{id}/trash", editor(s.handleItemStatus(item.StatusTrashed, "trashed")))
+	mux.Handle("POST /items/{id}/restore", editor(s.handleItemStatus(item.StatusActive, "restored")))
+	mux.Handle("GET /trash", editor(s.handleTrash))
+	mux.Handle("GET /media-types", editor(s.handleMediaTypes))
+	mux.Handle("POST /media-types", editor(s.handleMediaTypeCreate))
+	mux.Handle("POST /media-types/{id}/rename", editor(s.handleMediaTypeRename))
+	mux.Handle("POST /media-types/{id}/delete", editor(s.handleMediaTypeDelete))
 
 	// Admin pages. {id} is a wildcard; handlers read it with r.PathValue.
 	admin := func(h http.HandlerFunc) http.Handler { return s.requireRole(user.RoleAdmin, h) }
@@ -144,6 +181,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /admin/users/{id}/enable", admin(s.handleAdminUserEnable))
 	mux.Handle("GET /admin/settings", admin(s.handleAdminSettings))
 	mux.Handle("POST /admin/settings", admin(s.handleAdminSettingsSave))
+	mux.Handle("POST /trash/empty", admin(s.handleEmptyTrash))
 
 	// CSRF protection from the standard library (Go 1.25+). It rejects
 	// cross-site POST/PUT/DELETE requests using the browser's Sec-Fetch-Site
@@ -239,9 +277,15 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleIndex renders the start page, which for now shows the health status.
+// handleIndex renders the start page. Until the library page (milestone
+// 3c) it lists the most recently added items.
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
-	s.render(w, r, http.StatusOK, "index.html", pageData{Health: s.health(r.Context())})
+	p, err := s.items.List(r.Context(), item.Query{Sort: item.SortAdded, Desc: true})
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	s.render(w, r, http.StatusOK, "index.html", pageData{Page: p})
 }
 
 // pageData is what page templates receive. One struct for all pages keeps
@@ -255,7 +299,6 @@ type pageData struct {
 	Message        string     // confirmation after a save, see messages
 	Error          string
 	Form           formValues
-	Health         health
 	MinPasswordLen int
 
 	// Account and admin pages.
@@ -264,6 +307,29 @@ type pageData struct {
 	Roles     []user.Role  // choices for role menus
 	Anonymous bool         // the anonymous browsing setting, for its checkbox
 	Forced    bool         // the user must change their password now
+
+	// Library pages.
+	CanEdit     bool              // the user may change items (editor or admin)
+	Kinds       []item.Kind       // choices for kind menus
+	Choices     choices           // fixed choices for some item fields
+	MediaTypes  []*item.MediaType // media type menus and list
+	MediaType   *item.MediaType   // the type of the item being added or edited
+	Item        *item.Item        // the item shown or edited (nil when adding)
+	ItemForm    itemForm          // item form values as typed
+	FieldErrors item.FieldErrors  // item form errors per field
+	OtherErrors []string          // item form errors without a field
+	CreditRoles []string          // the credit boxes the item form shows
+	IDTypes     []string          // the identifier inputs the item form shows
+	SeriesNames []string          // suggestions for the series field
+	Duplicates  []item.Duplicate  // other items with the same identifier
+	Page        *item.Page        // a page of item summaries
+	AddedBy     string            // usernames for the item page
+	UpdatedBy   string
+}
+
+// choices are the fixed options of some item fields, for menus.
+type choices struct {
+	VideoStandards, Bindings, FileFormats []string
 }
 
 // messages are the confirmations a page shows after a redirect with
@@ -276,6 +342,15 @@ var messages = map[string]string{
 	"password-reset": "Password reset. The user must choose a new one at next login.",
 	"disabled":       "User disabled. Their sessions have been ended.",
 	"enabled":        "User enabled.",
+
+	"item-created":  "Item added.",
+	"hidden":        "Item hidden. Only editors and admins can see it now.",
+	"unhidden":      "Item visible again.",
+	"trashed":       "Item moved to the trash.",
+	"restored":      "Item restored from the trash.",
+	"trash-emptied": "Trash emptied.",
+	"type-created":  "Media type added.",
+	"type-deleted":  "Media type deleted.",
 
 	"logged-out-everywhere": "You have been logged out on all devices.",
 }
@@ -291,6 +366,10 @@ type formValues struct {
 	Remember bool // the "Remember me" checkbox on the login form
 	// MustChange is the "must change password" checkbox on the new-user form.
 	MustChange bool
+	// The new media type form.
+	Name     string
+	Kind     item.Kind
+	Physical bool
 }
 
 // render executes a page template. It renders into a buffer first, so a
@@ -301,6 +380,9 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, status int, page
 	data.AllowAnonymous = s.anonymous.Load()
 	data.MinPasswordLen = user.MinPasswordLen
 	data.Roles = user.Roles
+	data.CanEdit = canEdit(r)
+	data.Kinds = item.Kinds
+	data.Choices = choices{item.VideoStandards, item.Bindings, item.FileFormats}
 	if data.Message == "" {
 		data.Message = messages[r.URL.Query().Get("msg")] // unknown keys give ""
 	}

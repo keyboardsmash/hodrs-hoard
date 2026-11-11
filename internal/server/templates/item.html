@@ -1,0 +1,84 @@
+{{define "content"}}
+  {{$it := .Item}}{{$video := eq $it.MediaType.Kind "video"}}
+  {{if eq $it.Status "trashed"}}
+    <p class="warning">This item is in the trash{{if not $it.TrashedAt.IsZero}} since {{dateTime $it.TrashedAt}}{{end}}. Only editors and admins can see it.</p>
+  {{else if eq $it.Status "hidden"}}
+    <p class="warning">This item is hidden. Only editors and admins can see it.</p>
+  {{end}}
+
+  <h2>{{$it.Title}}{{with $it.Year}} ({{.}}){{end}}</h2>
+  {{with $it.OriginalTitle}}{{if ne . $it.Title}}<p class="muted">{{.}}</p>{{end}}{{end}}
+
+  {{range .Duplicates}}
+    <p class="warning">Another item has the same {{idLabel .Type}} {{.Value}}:
+      <a href="/items/{{.ItemID}}">{{.Title}}</a>{{if ne .Status "active"}} ({{.Status}}){{end}}</p>
+  {{end}}
+
+  {{if .CanEdit}}
+  <div class="actions">
+    <a href="/items/{{$it.ID}}/edit">Edit</a>
+    {{if eq $it.Status "trashed"}}
+      <form method="post" action="/items/{{$it.ID}}/restore"><button type="submit">Restore</button></form>
+    {{else}}
+      {{if eq $it.Status "hidden"}}
+        <form method="post" action="/items/{{$it.ID}}/unhide"><button type="submit">Unhide</button></form>
+      {{else}}
+        <form method="post" action="/items/{{$it.ID}}/hide"><button type="submit">Hide</button></form>
+      {{end}}
+      <form method="post" action="/items/{{$it.ID}}/trash"><button type="submit">Move to trash</button></form>
+    {{end}}
+  </div>
+  {{end}}
+
+  {{with $it.Description}}<p class="pre">{{.}}</p>{{end}}
+
+  <dl>
+    <dt>Media type</dt><dd>{{$it.MediaType.Name}}</dd>
+    {{with $it.Series}}<dt>Series</dt><dd>{{.}}{{with $it.SeriesNumber}} #{{.}}{{end}}</dd>{{end}}
+    {{with $it.Genres}}<dt>Genres</dt><dd>{{join . ", "}}</dd>{{end}}
+    {{range $role := .CreditRoles}}
+      {{with $it.People $role}}<dt>{{roleLabel $role}}</dt><dd>{{join . ", "}}</dd>{{end}}
+    {{end}}
+    {{with $it.AltTitles}}<dt>Other titles</dt><dd>{{join . "; "}}</dd>{{end}}
+
+    {{if $video}}
+      {{with $it.Runtime}}<dt>Runtime</dt><dd>{{.}} min</dd>{{end}}
+      {{if $it.IsTV}}<dt>TV series</dt><dd>yes{{with $it.Seasons}}, seasons {{.}}{{end}}</dd>{{end}}
+      {{with $it.Languages}}<dt>Audio languages</dt><dd>{{join . ", "}}</dd>{{end}}
+      {{with $it.Subtitles}}<dt>Subtitles</dt><dd>{{join . ", "}}</dd>{{end}}
+      {{with $it.Region}}<dt>Region</dt><dd>{{.}}</dd>{{end}}
+      {{with $it.VideoStandard}}<dt>Video standard</dt><dd>{{.}}</dd>{{end}}
+      {{with $it.AudioFormat}}<dt>Audio</dt><dd>{{.}}</dd>{{end}}
+      {{with $it.VideoFormat}}<dt>Picture</dt><dd>{{.}}</dd>{{end}}
+    {{else}}
+      {{with $it.Publisher}}<dt>Publisher</dt><dd>{{.}}</dd>{{end}}
+      {{with $it.Pages}}<dt>Pages</dt><dd>{{.}}</dd>{{end}}
+      {{with $it.Languages}}<dt>Language</dt><dd>{{join . ", "}}</dd>{{end}}
+      {{with $it.Binding}}<dt>Binding</dt><dd>{{.}}</dd>{{end}}
+      {{with $it.FileFormat}}<dt>File format</dt><dd>{{.}}</dd>{{end}}
+      {{with $it.FilePath}}<dt>File</dt><dd>{{.}}</dd>{{end}}
+    {{end}}
+
+    {{with $it.Countries}}<dt>Countries</dt><dd>{{join . ", "}}</dd>{{end}}
+    {{with $it.MPAA}}<dt>Certificate</dt><dd>{{.}}</dd>{{end}}
+    {{with $it.AgeLimit}}<dt>Age limit</dt><dd>{{.}}</dd>{{end}}
+    {{range $it.Identifiers}}
+      <dt>{{idLabel .Type}}</dt>
+      <dd>{{with idURL .}}<a href="{{.}}" rel="noopener noreferrer">{{end}}{{.Value}}{{if idURL .}}</a>{{end}}</dd>
+    {{end}}
+    {{with $it.Trailer}}<dt>Trailer</dt><dd><a href="{{.}}" rel="noopener noreferrer">{{.}}</a></dd>{{end}}
+
+    <dt>In collection</dt>
+    <dd>{{if $it.Own}}own{{else}}don't own{{end}}{{if $it.Seen}} · {{if $video}}seen{{else}}read{{end}}{{end}}{{if $it.Favourite}} · favourite{{end}}{{with $it.OwnRating}} · rated {{.}}/10{{end}}</dd>
+    {{/* Loans and notes are private: logged-in users only (spec 3.2). */}}
+    {{if .User}}
+      {{if $it.Loaned}}<dt>Loaned</dt><dd>{{with $it.LoanedTo}}to {{.}}{{else}}yes{{end}}{{with $it.LoanedOn}} since {{.}}{{end}}</dd>{{end}}
+      {{with $it.Notes}}<dt>Notes</dt><dd class="pre">{{.}}</dd>{{end}}
+    {{end}}
+    {{if $it.Incomplete}}<dt>Incomplete</dt><dd>missing {{if not $it.Year}}year{{else if $video}}runtime{{else}}author{{end}}</dd>{{end}}
+  </dl>
+
+  {{if .User}}
+  <p class="muted">Added {{dateTime $it.AddedAt}}{{with .AddedBy}} by {{.}}{{end}}{{if not ($it.UpdatedAt.Equal $it.AddedAt)}} · changed {{dateTime $it.UpdatedAt}}{{with .UpdatedBy}} by {{.}}{{end}}{{end}}</p>
+  {{end}}
+{{end}}
