@@ -193,7 +193,8 @@ Initial (seeded) types:
 - **Later:** seed Blu-ray, 3D Blu-ray, 4K UHD and audio (CD, vinyl).
 - **Decided:** book bindings (hardcover/paperback) are a field on the item,
   not separate media types.
-- Option to group media types by kind. 
+- Media-type menus (add form, filters) group the types under their kind
+  (Video, Book).
 
 ### 3.2 Item fields
 
@@ -205,12 +206,17 @@ Common fields (all kinds):
 | Field          | Notes                                       |
 |----------------|---------------------------------------------|
 | title          | Required                                    |
+| original_title | Title in the original language              |
+| alt_titles     | Other titles, one per line ("aka")         |
 | sort_title     | Derived ("The Matrix" → "Matrix, The"), editable |
 | media_type     | Required                                    |
 | year           |                                             |
-| description    | Plot or synopsis                            |
+| description    | Plot or synopsis, one text field            |
+| credits        | People with a role and order (see below)    |
+| countries      | Production countries, several               |
 | genres         | Many-to-many                                |
 | notes          | Free text, private                          |
+| own_rating     | Your own rating, 1–10, empty = unrated      |
 | cover          | See 3.5                                     |
 | status         | active / hidden / trashed                   |
 | added_at       | auto                                        |
@@ -226,23 +232,37 @@ Video fields (DVD, VHS):
 | Field     | Notes                                     |
 |-----------|-------------------------------------------|
 | runtime   | Minutes                                   |
-| directors | People, many-to-many                      |
-| cast      | People, many-to-many, with order          |
 | languages | Audio languages                           |
 | subtitles |                                           |
 | region    | Free text, suggestions per media type: DVD 0–8, Blu-ray A/B/C, "region free" |
 | video_standard | PAL, NTSC, SECAM or empty           |
+| is_tv     | TV series (checkbox); lists can filter films vs TV |
+| seasons   | Text, e.g. "4" or "1–3"                  |
+| audio_format | Free text, e.g. "Dolby Digital 5.1"  |
+| video_format | Free text, e.g. "16:9 anamorphic"    |
 
 Book fields (Book, Ebook):
 
 | Field     | Notes                            |
 |-----------|----------------------------------|
-| authors   | People, many-to-many             |
 | publisher |                                  |
 | pages     |                                  |
 | language  |                                  |
 | binding   | Physical books: hardcover, paperback, other or empty |
 | file      | Ebook only: path or uploaded file, format (EPUB/PDF) |
+
+**Decided:** credits are one many-to-many link from items to people, with
+a role and an order: director, cast, writer, producer and composer for
+video; author for books. More roles (translator, illustrator, ...) are
+just new values. A person is shared across items, so a search for a name
+finds films and books alike.
+
+**Decided:** one `description` field. PHP4DVD's short plot outline and
+taglines are not kept as fields (the importer moves them to notes).
+
+**Decided:** no public rating (IMDb/TMDb rating and votes); those go stale.
+Instead an optional own rating, which the later IMDb ratings CSV import
+fills. Like own/seen/favourite it belongs to the item, not to a user.
 
 **Decided:** series are two optional fields on every item, for all kinds
 (book series and film series alike), not a separate table. Lists can sort
@@ -314,7 +334,8 @@ Stored in a separate table: `(item_id, type, value)`.
     series; ascending or descending.
   - Filters: media type, kind, genre, status, incomplete, and own, seen,
     favourite, loaned.
-  - Free-text search across title, original title, people and notes,
+  - Free-text search across title, original title, alternative titles,
+    people and notes,
     using simple `LIKE` matching. **Later:** SQLite full-text search
     (FTS5) if it gets slow or word stemming is needed.
   - 50 items per page.
@@ -405,7 +426,26 @@ API keys come from configuration and are never committed.
 
 ## Appendix B. PHP4DVD → Höðrs Hoard field mapping
 
-*To be written with the importer milestone.*
+Draft; finalised with the importer milestone.
+
+| PHP4DVD                    | Höðrs Hoard                                   |
+|----------------------------|-----------------------------------------------|
+| name / nameorder           | title / sort_title                            |
+| aka                        | alt_titles                                    |
+| format                     | media_type (created if unknown)               |
+| year, duration             | year, runtime                                 |
+| imdbid                     | identifiers (type imdb)                       |
+| plots, plotoutline         | description = plots, else plotoutline; a different plotoutline goes to notes |
+| taglines                   | notes                                         |
+| director, cast, writer, producer, music | credits (director, cast, writer, producer, composer) |
+| genres, languages, country | genres, languages, countries                  |
+| subtitles, audio, video    | subtitles, audio_format, video_format         |
+| tv, seasons                | is_tv, seasons                                |
+| rating, votes              | not imported                                  |
+| own, seen, favourite       | same                                          |
+| loaned, loandate, loanname | loans                                         |
+| trailer, mpaa, pg          | same                                          |
+| notes, added               | notes, added_at                               |
 
 ## Appendix C. Decision log
 
@@ -440,3 +480,11 @@ API keys come from configuration and are never committed.
 | 2026-11-10 | Region and video standard (PAL/NTSC/SECAM) are two optional fields. |
 | 2026-11-10 | Series: name and number fields on every item, all kinds. |
 | 2026-11-10 | Browsing baseline: list and grid, LIKE search, 50 per page. |
+| 2026-11-11 | Credits: one item–people link with role and order (director, cast, writer, producer, composer, author). |
+| 2026-11-11 | Titles: original_title plus alt_titles (PHP4DVD aka). |
+| 2026-11-11 | TV series: is_tv flag and seasons text on video items. |
+| 2026-11-11 | No public rating/votes; optional own rating (1–10) per item instead. |
+| 2026-11-11 | One description field; plot outline and taglines go to notes on import. |
+| 2026-11-11 | Countries: multi-value field on all kinds. |
+| 2026-11-11 | Audio and video format: free-text fields on video items. |
+| 2026-11-11 | Media-type menus are grouped by kind. |
