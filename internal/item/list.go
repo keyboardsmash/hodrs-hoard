@@ -43,7 +43,7 @@ var sortSQL = map[string]string{
 	SortAdded: "i.added_at {dir}, i.id {dir}",
 	// Grouped by kind first, as in the menus (see MediaTypes).
 	SortMediaType: kindOrder + " {dir}, m.sort_order {dir}, m.name_key {dir}, i.sort_key, i.id",
-	SortTrashed: "i.trashed_at {dir}, i.id {dir}",
+	SortTrashed:   "i.trashed_at {dir}, i.id {dir}",
 	// Series numbers are text ("1.5", "III"); sort numerically where they
 	// are numbers, then as text.
 	SortSeries: "i.series_key {dir} NULLS LAST, CAST(i.series_number AS REAL) {dir}, i.series_number {dir}, i.sort_key, i.id",
@@ -55,7 +55,9 @@ const kindOrder = "CASE m.kind WHEN 'video' THEN 0 ELSE 1 END"
 // Query says which items List returns. The zero value lists active items
 // by title, first page.
 type Query struct {
-	Search      string
+	Search string
+	// Private also searches notes and borrowers. Only for logged-in users.
+	Private     bool
 	MediaTypeID int64
 	Kind        Kind
 	GenreID     int64
@@ -203,7 +205,12 @@ func (q Query) where() (string, []any) {
 
 	// Every word must appear somewhere, like PHP4DVD's search.
 	for _, word := range strings.Fields(strings.ToLower(q.Search)) {
-		add(`i.search_text LIKE ? ESCAPE '\'`, "%"+escapeLike(word)+"%")
+		pattern := "%" + escapeLike(word) + "%"
+		if q.Private {
+			add(`(i.search_text LIKE ? ESCAPE '\' OR i.search_private LIKE ? ESCAPE '\')`, pattern, pattern)
+		} else {
+			add(`i.search_text LIKE ? ESCAPE '\'`, pattern)
+		}
 	}
 	if q.MediaTypeID != 0 {
 		add("i.media_type_id = ?", q.MediaTypeID)

@@ -30,3 +30,16 @@
   {{if gt .Page.Pages 1}}<p class="muted">Page {{.Page.Page}} of {{.Page.Pages}} · {{.Page.Total}} items</p>{{end}}
   {{end}}
 {{end}}
+
+{{/* An own/seen/favourite button in the library list (.Toggle-shaped data,
+     see newToggle). With htmx it swaps itself for the server's answer;
+     without JavaScript it is a normal form that returns to .Back. */}}
+{{define "toggle"}}
+<form class="toggle" method="post" action="/items/{{.ID}}/toggle/{{.Flag}}"
+      hx-post="/items/{{.ID}}/toggle/{{.Flag}}" hx-target="this" hx-swap="outerHTML" hx-push-url="false">
+  <input type="hidden" name="value" value="{{if .On}}off{{else}}on{{end}}">
+  <input type="hidden" name="back" value="{{.Back}}">
+  <button type="submit" class="{{if .On}}on{{end}}" aria-pressed="{{.On}}"
+          title="{{if .On}}Unmark{{else}}Mark{{end}} as {{.Label}}">{{.Label}}</button>
+</form>
+{{end}}

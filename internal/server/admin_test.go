@@ -67,6 +67,12 @@ func TestEveryPageRenders(t *testing.T) {
 			req = req.WithContext(context.WithValue(req.Context(), userKey, me))
 			rec := httptest.NewRecorder()
 			kind := it.MediaType.Kind
+			libReq := httptest.NewRequest("GET", "/?q=x&own=yes&sort=year&dir=desc&view=grid&page=2", nil)
+			libReq = libReq.WithContext(req.Context())
+			lib := parseLibrary(httptest.NewRecorder(), libReq)
+			if i == 1 {
+				lib.View = viewList
+			}
 			a.s.render(rec, req, http.StatusOK, pg, pageData{
 				Title: "x", Target: target, Users: []*user.User{me, other},
 				Form:        formValues{Role: user.RoleEditor, Kind: kind},
@@ -80,7 +86,10 @@ func TestEveryPageRenders(t *testing.T) {
 				IDTypes:     identifierTypes(kind, it),
 				SeriesNames: []string{"Saga"},
 				Duplicates:  dups,
-				Page:        page,
+				Page:        &item.Page{Items: page.Items, Total: 500, Page: 3, Pages: 10},
+				PageNumbers: pageNumbers(3, 10),
+				Lib:         lib,
+				Genres:      []item.Genre{{ID: 1, Name: "Drama"}},
 				AddedBy:     "alice",
 			})
 			if rec.Code != http.StatusOK {

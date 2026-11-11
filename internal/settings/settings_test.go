@@ -32,3 +32,25 @@ func TestBool(t *testing.T) {
 		t.Errorf("garbage value: %v, %v; want default and an error", v, err)
 	}
 }
+
+func TestInt(t *testing.T) {
+	ctx := context.Background()
+	d := db.OpenTestMigrated(t)
+	s := NewStore(d)
+
+	if v, err := s.Int(ctx, SearchVersion, 7); err != nil || v != 7 {
+		t.Errorf("unset = %v, %v; want default 7", v, err)
+	}
+	for _, want := range []int{1, 2, -3} {
+		if err := s.SetInt(ctx, SearchVersion, want); err != nil {
+			t.Fatal(err)
+		}
+		if v, err := s.Int(ctx, SearchVersion, 0); err != nil || v != want {
+			t.Errorf("after SetInt(%d): %v, %v", want, v, err)
+		}
+	}
+	d.Exec(`UPDATE settings SET value = 'two' WHERE key = ?`, SearchVersion)
+	if v, err := s.Int(ctx, SearchVersion, 0); err == nil || v != 0 {
+		t.Errorf("garbage value: %v, %v; want default and an error", v, err)
+	}
+}

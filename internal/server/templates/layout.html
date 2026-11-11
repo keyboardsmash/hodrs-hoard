@@ -40,7 +40,28 @@
     .actions form { display: inline; }
     .muted { color: #666; }
     .pre { white-space: pre-line; }
+    .filters { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+    .filters input[type=search] { flex: 1 1 14rem; padding: .4rem; font: inherit; }
+    .filters select { padding: .3rem; font: inherit; }
+    .views { margin: .5rem 0; }
+    .badge { font-size: .75em; border: 1px solid #999; border-radius: .25rem; padding: 0 .3rem; color: #555; white-space: nowrap; }
+    td.marks { white-space: nowrap; }
+    form.toggle { display: inline; }
+    form.toggle button { border: 1px solid #ccc; background: none; border-radius: 1rem; padding: 0 .5rem; font-size: .8em; color: #888; cursor: pointer; }
+    form.toggle button.on { background: #15803d; border-color: #15803d; color: #fff; }
+    ul.grid { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: 1.25rem; }
+    ul.grid a { text-decoration: none; }
+    .cover { aspect-ratio: 2 / 3; background: #eee; border-radius: .25rem; display: flex; flex-direction: column;
+             align-items: center; justify-content: center; color: #666; margin-bottom: .35rem; }
+    .cover span { font-size: 2.5rem; }
+    .pager { display: flex; flex-wrap: wrap; gap: .75rem; margin: 1rem 0; }
+    th a { color: inherit; }
+    .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+    /* htmx adds this class while a request runs. */
+    .htmx-request #results, #results.htmx-request { opacity: .6; }
   </style>
+  {{/* htmx (spec: vendored, served from the binary). defer: run after the page is parsed. */}}
+  <script src="/static/htmx-2.0.4.min.js" defer></script>
 </head>
 <body>
   <header>

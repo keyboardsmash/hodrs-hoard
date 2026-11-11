@@ -386,7 +386,7 @@ func TestListFilters(t *testing.T) {
 		Credits: []Credit{{RoleDirector, "Ridley Scott"}}})
 	mustCreate(t, s, &Item{MediaTypeID: vhs, Title: "The Thing", Year: 1982, Genres: horror, Own: true, Favourite: true,
 		Notes: "100% creepy"})
-	mustCreate(t, s, &Item{MediaTypeID: dvd, Title: "Twin Peaks", Year: 1990, Runtime: 47, IsTV: true, Loaned: true})
+	mustCreate(t, s, &Item{MediaTypeID: dvd, Title: "Twin Peaks", Year: 1990, Runtime: 47, IsTV: true, Loaned: true, LoanedTo: "Lena"})
 	mustCreate(t, s, &Item{MediaTypeID: book, Title: "Höðrs saga", Year: 1200, Credits: []Credit{{RoleAuthor, "Snorri"}}})
 	mustCreate(t, s, &Item{MediaTypeID: ebook, Title: "Draft", AltTitles: []string{"Hidden one"}, Status: StatusHidden})
 
@@ -409,8 +409,12 @@ func TestListFilters(t *testing.T) {
 		{"search person", Query{Search: "scott"}, []string{"Alien"}},
 		{"search all words", Query{Search: "ridley alien"}, []string{"Alien"}},
 		{"search words anywhere", Query{Search: "ridley thing"}, []string{}},
-		{"search notes", Query{Search: "100%"}, []string{"The Thing"}},
-		{"percent is literal", Query{Search: "%"}, []string{"The Thing"}},
+		{"notes are private", Query{Search: "creepy"}, []string{}},
+		{"search notes", Query{Search: "creepy", Private: true}, []string{"The Thing"}},
+		{"search borrower", Query{Search: "lena", Private: true}, []string{"Twin Peaks"}},
+		{"borrower is private", Query{Search: "lena"}, []string{}},
+		{"private and public words", Query{Search: "creepy thing", Private: true}, []string{"The Thing"}},
+		{"percent is literal", Query{Search: "%", Private: true}, []string{"The Thing"}},
 		{"underscore is literal", Query{Search: "_"}, []string{}},
 		{"media type", Query{MediaTypeID: dvd}, []string{"Alien", "Twin Peaks"}},
 		{"kind", Query{Kind: KindBook}, []string{"Höðrs saga"}},
@@ -508,5 +512,52 @@ func TestListSortNulls(t *testing.T) {
 		if got := titles(p); !reflect.DeepEqual(got, tt.want) {
 			t.Errorf("%+v: got %q, want %q", tt.q, got, tt.want)
 		}
+	}
+}
+
+func TestRebuildSearch(t *testing.T) {
+	s := newStore(t)
+	id := mustCreate(t, s, &Item{MediaTypeID: dvd, Title: "Alien", Notes: "Signed copy"})
+	// Simulate a database from before migration 0005: notes in the public
+	// text, nothing in the private one.
+	if _, err := s.db.Exec(`UPDATE items SET search_text = 'alien signed copy', search_private = '' WHERE id = ?`, id); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := s.List(ctx, Query{Search: "signed"}); p.Total != 1 {
+		t.Fatal("setup: old data should leak")
+	}
+	n, err := s.RebuildSearch(ctx)
+	if err != nil || n != 1 {
+		t.Fatalf("RebuildSearch = %d, %v", n, err)
+	}
+	if p, _ := s.List(ctx, Query{Search: "signed"}); p.Total != 0 {
+		t.Error("notes still in the public search text")
+	}
+	if p, _ := s.List(ctx, Query{Search: "signed", Private: true}); p.Total != 1 {
+		t.Error("notes not in the private search text")
+	}
+}
+
+func TestSetFlag(t *testing.T) {
+	s := newStore(t)
+	id := mustCreate(t, s, &Item{MediaTypeID: dvd, Title: "Alien"})
+	before := mustGet(t, s, id)
+	for _, f := range []string{FlagSeen, FlagFavourite} {
+		if err := s.SetFlag(ctx, 0, id, f, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.SetFlag(ctx, 0, id, FlagOwn, false); err != nil {
+		t.Fatal(err)
+	}
+	got := mustGet(t, s, id)
+	if got.Own || !got.Seen || !got.Favourite || !got.UpdatedAt.After(before.UpdatedAt) {
+		t.Errorf("flags = own %v seen %v favourite %v", got.Own, got.Seen, got.Favourite)
+	}
+	if err := s.SetFlag(ctx, 0, id, "loaned; DROP TABLE items", true); err == nil {
+		t.Error("unknown flag accepted")
+	}
+	if err := s.SetFlag(ctx, 0, 999, FlagSeen, true); !errors.Is(err, ErrNotFound) {
+		t.Errorf("missing item: %v", err)
 	}
 }

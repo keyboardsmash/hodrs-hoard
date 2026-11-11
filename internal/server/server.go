@@ -27,6 +27,11 @@ import (
 //go:embed templates/*.html
 var templateFS embed.FS
 
+// staticFS holds files served as they are under /static/ (htmx).
+//
+//go:embed static
+var staticFS embed.FS
+
 // AppName is the display name used in page titles and the UI.
 const AppName = "Höðrs Hoard"
 
@@ -50,6 +55,11 @@ var templateFuncs = template.FuncMap{
 	"dateTime":  func(t time.Time) string { return t.Format("2006-01-02 15:04") },
 	"mapGet":    func(m map[string]string, k string) string { return m[k] },
 	"add":       func(a, b int) int { return a + b },
+	"toggle":    newToggle,
+	"initial":   initial,
+	// list bundles several arguments for a {{template}} call, which takes
+	// only one: {{template "sort-link" (list $l "year" "Year")}}.
+	"list": func(args ...any) []any { return args },
 }
 
 // Server holds what the HTTP handlers need.
@@ -111,6 +121,10 @@ func New(ctx context.Context, version string, log *slog.Logger, db *sql.DB) (*Se
 	}
 	s.anonymous.Store(anon)
 
+	if err := s.updateSearch(ctx); err != nil {
+		return nil, fmt.Errorf("updating search text: %w", err)
+	}
+
 	auth.PrepareDummy()
 
 	n, err := s.users.Count(ctx)
@@ -125,6 +139,21 @@ func New(ctx context.Context, version string, log *slog.Logger, db *sql.DB) (*Se
 			"setup_code", s.setupCode)
 	}
 	return s, nil
+}
+
+// updateSearch rebuilds the items' search text when the database holds an
+// older version of it than this program builds (see item.SearchVersion).
+func (s *Server) updateSearch(ctx context.Context) error {
+	have, err := s.settings.Int(ctx, settings.SearchVersion, 0)
+	if err != nil || have >= item.SearchVersion {
+		return err
+	}
+	n, err := s.items.RebuildSearch(ctx)
+	if err != nil {
+		return err
+	}
+	s.log.Info("rebuilt search text", "items", n, "version", item.SearchVersion)
+	return s.settings.SetInt(ctx, settings.SearchVersion, item.SearchVersion)
 }
 
 // Handler returns the router with all routes registered.
@@ -142,7 +171,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /setup", s.handleSetup)
 
 	// Read-only pages: logged-in users, and anonymous visitors when allowed.
-	mux.Handle("GET /{$}", s.browse(s.handleIndex))
+	mux.Handle("GET /static/", staticHandler())
+	mux.Handle("GET /{$}", s.browse(s.handleLibrary))
 	mux.Handle("GET /items/{id}", s.browse(s.handleItem))
 
 	// Own account: any logged-in user.
@@ -162,6 +192,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /items/{id}/hide", editor(s.handleItemStatus(item.StatusHidden, "hidden")))
 	mux.Handle("POST /items/{id}/unhide", editor(s.handleItemStatus(item.StatusActive, "unhidden")))
 	mux.Handle("POST /items/{id}/trash", editor(s.handleItemStatus(item.StatusTrashed, "trashed")))
+	mux.Handle("POST /items/{id}/toggle/{flag}", editor(s.handleToggle))
 	mux.Handle("POST /items/{id}/restore", editor(s.handleItemStatus(item.StatusActive, "restored")))
 	mux.Handle("GET /trash", editor(s.handleTrash))
 	mux.Handle("GET /media-types", editor(s.handleMediaTypes))
@@ -277,15 +308,14 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleIndex renders the start page. Until the library page (milestone
-// 3c) it lists the most recently added items.
-func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
-	p, err := s.items.List(r.Context(), item.Query{Sort: item.SortAdded, Desc: true})
-	if err != nil {
-		s.serverError(w, r, err)
-		return
-	}
-	s.render(w, r, http.StatusOK, "index.html", pageData{Page: p})
+// staticHandler serves the embedded static files. Their names contain a
+// version (htmx-2.0.4.min.js), so browsers may cache them for a year.
+func staticHandler() http.Handler {
+	files := http.FileServerFS(staticFS) // URL paths /static/... match the embedded folder
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		files.ServeHTTP(w, r)
+	})
 }
 
 // pageData is what page templates receive. One struct for all pages keeps
@@ -323,6 +353,9 @@ type pageData struct {
 	SeriesNames []string          // suggestions for the series field
 	Duplicates  []item.Duplicate  // other items with the same identifier
 	Page        *item.Page        // a page of item summaries
+	PageNumbers []int             // page links under a list; 0 is a gap
+	Lib         *library          // the library page's filters and links
+	Genres      []item.Genre      // the genre filter's choices
 	AddedBy     string            // usernames for the item page
 	UpdatedBy   string
 }
@@ -372,9 +405,24 @@ type formValues struct {
 	Physical bool
 }
 
-// render executes a page template. It renders into a buffer first, so a
-// template error gives a clean 500 instead of half a page.
+// render renders a whole page: the layout around the page's content.
 func (s *Server) render(w http.ResponseWriter, r *http.Request, status int, page string, data pageData) {
+	s.fill(r, &data)
+	if data.Message == "" {
+		data.Message = messages[r.URL.Query().Get("msg")] // unknown keys give ""
+	}
+	s.execute(w, r, status, page, "layout", data)
+}
+
+// renderPart renders one named template of a page without the layout, for
+// htmx requests that replace part of the page.
+func (s *Server) renderPart(w http.ResponseWriter, r *http.Request, page, name string, data pageData) {
+	s.fill(r, &data)
+	s.execute(w, r, http.StatusOK, page, name, data)
+}
+
+// fill sets the page data every page gets.
+func (s *Server) fill(r *http.Request, data *pageData) {
 	data.AppName = AppName
 	data.User = currentUser(r.Context())
 	data.AllowAnonymous = s.anonymous.Load()
@@ -383,18 +431,23 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, status int, page
 	data.CanEdit = canEdit(r)
 	data.Kinds = item.Kinds
 	data.Choices = choices{item.VideoStandards, item.Bindings, item.FileFormats}
-	if data.Message == "" {
-		data.Message = messages[r.URL.Query().Get("msg")] // unknown keys give ""
-	}
+}
 
+// execute runs template name of page into a buffer first, so a template
+// error gives a clean 500 instead of half a page. data is usually a
+// pageData; `any` also allows a small snippet's own data.
+func (s *Server) execute(w http.ResponseWriter, r *http.Request, status int, page, name string, data any) {
 	var buf bytes.Buffer
-	if err := s.templates[page].ExecuteTemplate(&buf, "layout", data); err != nil {
-		s.serverError(w, r, fmt.Errorf("render %s: %w", page, err))
+	if err := s.templates[page].ExecuteTemplate(&buf, name, data); err != nil {
+		s.serverError(w, r, fmt.Errorf("render %s/%s: %w", page, name, err))
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	// Pages can show private data; don't let browsers or proxies cache them.
 	w.Header().Set("Cache-Control", "no-store")
+	// The same URL answers with a whole page or a part, depending on this
+	// header; caches must keep them apart.
+	w.Header().Set("Vary", "HX-Request, HX-Target")
 	w.WriteHeader(status)
 	buf.WriteTo(w) //nolint:errcheck // a failed write means the client went away
 }

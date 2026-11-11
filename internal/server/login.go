@@ -29,9 +29,10 @@ func currentUser(ctx context.Context) *user.User {
 	return u
 }
 
-// isPublic lists paths that work without login and before setup.
+// isPublic lists paths that work without login and before setup: the
+// health check and static files (htmx, needed by the login page too).
 func isPublic(path string) bool {
-	return path == "/healthz"
+	return path == "/healthz" || strings.HasPrefix(path, "/static/")
 }
 
 // setupGate sends every request to /setup until the first admin exists.

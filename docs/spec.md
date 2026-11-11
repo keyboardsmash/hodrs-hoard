@@ -360,6 +360,15 @@ Stored in a separate table: `(item_id, type, value)`.
     using simple `LIKE` matching. **Later:** SQLite full-text search
     (FTS5) if it gets slow or word stemming is needed.
   - 50 items per page.
+- **Decided** (milestone 3c):
+  - The library is the start page. Filters, sorting, view and page are
+    all in the URL, so views can be bookmarked. Default sort: title.
+  - The last chosen view (list or grid) is remembered in a cookie.
+  - With htmx, filter changes reload only the results; everything also
+    works without JavaScript.
+  - Editors and admins can toggle own, seen and favourite in the list.
+  - Notes and borrowers are searched only for logged-in users. Anonymous
+    visitors get no loaned filter or loaned mark either.
 
 ---
 
@@ -524,3 +533,9 @@ Draft; finalised with the importer milestone.
 | 2026-11-11 | An item's media type can't change to another kind. |
 | 2026-11-11 | Notes and loan details are hidden from anonymous visitors. |
 | 2026-11-11 | Several identifiers of one type: comma-separated in one input. |
+| 2026-11-11 | Library view (list/grid) remembered in a cookie; filters and sort only in the URL. |
+| 2026-11-11 | In-list toggles for own/seen/favourite: editors and admins only. |
+| 2026-11-11 | Loaned filter and mark hidden from anonymous visitors. |
+| 2026-11-11 | Library default sort: title. |
+| 2026-11-11 | Notes and borrowers searchable by logged-in users only (separate search column). |
+| 2026-11-11 | htmx 2.0.4 (0BSD licence), `internal/server/static/htmx-2.0.4.min.js`, SHA-256 e209dda5c8235479f3166defc7750e1dbcd5a5c1808b7792fc2e6733768fb447, identical on unpkg and jsdelivr. |

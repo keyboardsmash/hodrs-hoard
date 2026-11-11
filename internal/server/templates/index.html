@@ -1,8 +1,172 @@
+{{/* The library page (spec 5). htmx replaces parts of it:
+     - "results" when a filter changes (the form keeps focus while typing),
+     - "library" for sort, view and page links, which change the form too.
+     Every link and form also works as a plain page load without JavaScript. */}}
 {{define "content"}}
-  {{if .Page.Items}}
-    <h2>Recently added</h2>
-    {{template "item-table" .}}
+  <div id="library">{{template "library" .}}</div>
+{{end}}
+
+{{define "library"}}
+  {{$l := .Lib}}{{$types := .MediaTypes}}
+  <form id="filters" class="filters" method="get" action="/"
+        hx-get="/" hx-target="#results" hx-push-url="true" hx-sync="this:replace"
+        hx-trigger="submit, change, input changed delay:300ms from:#q">
+    {{if ne $l.View "list"}}<input type="hidden" name="view" value="{{$l.View}}">{{end}}
+    <input id="q" type="search" name="q" value="{{$l.Search}}" aria-label="Search"
+           placeholder="Search titles and people{{if $l.ShowPrivate}}, notes{{end}}">
+    <select name="type" aria-label="Media type">
+      <option value="">All media types</option>
+      {{range .Kinds}}{{$kind := .}}
+        <optgroup label="{{.Label}}">
+          {{range $types}}{{if eq .Kind $kind}}
+            <option value="{{.ID}}"{{if eq (print .ID) $l.Type}} selected{{end}}>{{.Name}}</option>
+          {{end}}{{end}}
+        </optgroup>
+      {{end}}
+    </select>
+    <select name="kind" aria-label="Kind">
+      <option value="">All kinds</option>
+      {{range .Kinds}}<option value="{{.}}"{{if eq (print .) $l.Kind}} selected{{end}}>{{.Label}}</option>{{end}}
+    </select>
+    {{with .Genres}}
+    <select name="genre" aria-label="Genre">
+      <option value="">All genres</option>
+      {{range .}}<option value="{{.ID}}"{{if eq (print .ID) $l.Genre}} selected{{end}}>{{.Name}}</option>{{end}}
+    </select>
+    {{end}}
+    {{template "flag-select" (list "own" $l.Own "Owned or not" "Owned" "Not owned")}}
+    {{template "flag-select" (list "seen" $l.Seen "Seen or not" "Seen / read" "Not seen / read")}}
+    {{template "flag-select" (list "fav" $l.Favourite "Favourite or not" "Favourites" "Not favourites")}}
+    {{template "flag-select" (list "tv" $l.TV "Films and TV" "TV series" "Not TV series")}}
+    {{if $l.ShowLoaned}}{{template "flag-select" (list "loaned" $l.Loaned "Loaned or not" "Loaned out" "Not loaned out")}}{{end}}
+    {{if $l.ShowStatus}}
+    <select name="status" aria-label="Status">
+      <option value="">Active items</option>
+      <option value="hidden"{{if eq $l.Status "hidden"}} selected{{end}}>Hidden items</option>
+    </select>
+    {{end}}
+    <label class="check"><input type="checkbox" name="incomplete" value="1"{{if $l.Incomplete}} checked{{end}}> Incomplete</label>
+    <select name="sort" aria-label="Sort by">
+      <option value="title"{{if eq $l.Sort "title"}} selected{{end}}>Sort by title</option>
+      <option value="year"{{if eq $l.Sort "year"}} selected{{end}}>Sort by year</option>
+      <option value="added"{{if eq $l.Sort "added"}} selected{{end}}>Sort by date added</option>
+      <option value="media_type"{{if eq $l.Sort "media_type"}} selected{{end}}>Sort by media type</option>
+      <option value="series"{{if eq $l.Sort "series"}} selected{{end}}>Sort by series</option>
+    </select>
+    <select name="dir" aria-label="Sort direction">
+      <option value="">Ascending</option>
+      <option value="desc"{{if $l.Desc}} selected{{end}}>Descending</option>
+    </select>
+    <button type="submit">Apply</button>
+    {{if $l.Filtered}}<a href="{{$l.ClearURL}}" hx-get="{{$l.ClearURL}}" hx-target="#library" hx-push-url="true">Clear filters</a>{{end}}
+  </form>
+  <p class="views">View:
+    {{if eq $l.View "list"}}<strong>list</strong>{{else}}<a href="{{$l.URL "view" "list"}}" hx-get="{{$l.URL "view" "list"}}" hx-target="#library" hx-push-url="true">list</a>{{end}}
+    ·
+    {{if eq $l.View "grid"}}<strong>grid</strong>{{else}}<a href="{{$l.URL "view" "grid"}}" hx-get="{{$l.URL "view" "grid"}}" hx-target="#library" hx-push-url="true">grid</a>{{end}}
+  </p>
+  <div id="results">{{template "results" .}}</div>
+{{end}}
+
+{{/* A yes/no/any menu. Arguments (list): name, current value, label for
+     any, label for yes, label for no. */}}
+{{define "flag-select"}}
+  {{$name := index . 0}}{{$cur := index . 1}}
+  <select name="{{$name}}" aria-label="{{index . 2}}">
+    <option value="">{{index . 2}}</option>
+    <option value="yes"{{if eq $cur "yes"}} selected{{end}}>{{index . 3}}</option>
+    <option value="no"{{if eq $cur "no"}} selected{{end}}>{{index . 4}}</option>
+  </select>
+{{end}}
+
+{{define "results"}}
+  {{$l := .Lib}}{{$p := .Page}}
+  {{if not $p.Items}}
+    {{if gt $p.Total 0}}
+      <p>There is no page {{$p.Page}}. <a href="{{$l.PageURL 1}}">Go to the first page</a>.</p>
+    {{else if $l.Filtered}}
+      <p>No items match. <a href="{{$l.ClearURL}}">Clear filters</a>.</p>
+    {{else}}
+      <p>The library is empty.{{if .CanEdit}} <a href="/items/new">Add the first item</a>.{{end}}</p>
+    {{end}}
   {{else}}
-    <p>The library is empty.{{if .CanEdit}} <a href="/items/new">Add the first item</a>.{{end}}</p>
+    <p class="muted">{{itemCount $p.Total}}{{if gt $p.Pages 1}} · page {{$p.Page}} of {{$p.Pages}}{{end}}</p>
+    {{if eq $l.View "grid"}}
+      <ul class="grid">
+      {{range $p.Items}}
+        <li>
+          <a href="/items/{{.ID}}">
+            <div class="cover" aria-hidden="true"><span>{{initial .Title}}</span><small>{{.MediaType}}</small></div>
+            {{.Title}}</a>{{with .Year}} <span class="muted">{{.}}</span>{{end}}
+          {{with .People}}<div class="muted">{{join . ", "}}</div>{{end}}
+        </li>
+      {{end}}
+      </ul>
+    {{else}}
+      <table class="library">
+        <thead><tr>
+          <th>{{template "sort-link" (list $l "title" "Title")}}</th>
+          <th>{{template "sort-link" (list $l "year" "Year")}}</th>
+          <th>{{template "sort-link" (list $l "media_type" "Type")}}</th>
+          <th>Directors / authors</th>
+          <th>{{template "sort-link" (list $l "series" "Series")}}</th>
+          <th><span class="visually-hidden">Marks</span></th>
+        </tr></thead>
+        <tbody>
+        {{range $p.Items}}
+          <tr>
+            <td>
+              <a href="/items/{{.ID}}">{{.Title}}</a>
+              {{if .IsTV}}<span class="badge">TV</span>{{end}}
+              {{if and $.CanEdit .Incomplete}}<span class="badge" title="Missing year{{if eq .Kind "video"}} or runtime{{else}} or author{{end}}">incomplete</span>{{end}}
+            </td>
+            <td>{{with .Year}}{{.}}{{end}}</td>
+            <td>{{.MediaType}}</td>
+            <td>{{join .People ", "}}</td>
+            <td>{{.Series}}{{with .SeriesNumber}} #{{.}}{{end}}</td>
+            <td class="marks">
+              {{if $.CanEdit}}
+                {{template "toggle" (toggle .ID "own" .Own $l.Here)}}
+                {{template "toggle" (toggle .ID "seen" .Seen $l.Here)}}
+                {{template "toggle" (toggle .ID "favourite" .Favourite $l.Here)}}
+              {{else}}
+                {{if .Own}}<span class="badge">own</span>{{end}}
+                {{if .Seen}}<span class="badge">seen</span>{{end}}
+                {{if .Favourite}}<span class="badge">♥</span>{{end}}
+              {{end}}
+              {{if and $l.ShowLoaned .Loaned}}<span class="badge">loaned</span>{{end}}
+            </td>
+          </tr>
+        {{end}}
+        </tbody>
+      </table>
+    {{end}}
+    {{template "pager" .}}
   {{end}}
+{{end}}
+
+{{/* A sortable column header. Arguments (list): the library, sort key, label. */}}
+{{define "sort-link"}}
+  {{$l := index . 0}}{{$key := index . 1}}
+  <a href="{{$l.SortURL $key}}" hx-get="{{$l.SortURL $key}}" hx-target="#library" hx-push-url="true">{{index . 2}}{{$l.SortMark $key}}</a>
+{{end}}
+
+{{define "pager"}}
+  {{$l := .Lib}}{{$cur := .Page.Page}}{{$last := .Page.Pages}}
+  {{if gt $last 1}}
+  <nav class="pager" aria-label="Pages">
+    {{if gt $cur 1}}{{template "page-link" (list $l (add $cur -1) "← Previous")}}{{end}}
+    {{range .PageNumbers}}
+      {{if eq . 0}}<span>…</span>
+      {{else if eq . $cur}}<strong aria-current="page">{{.}}</strong>
+      {{else}}{{template "page-link" (list $l . (print .))}}{{end}}
+    {{end}}
+    {{if lt $cur $last}}{{template "page-link" (list $l (add $cur 1) "Next →")}}{{end}}
+  </nav>
+  {{end}}
+{{end}}
+
+{{define "page-link"}}
+  {{$l := index . 0}}{{$n := index . 1}}
+  <a href="{{$l.PageURL $n}}" hx-get="{{$l.PageURL $n}}" hx-target="#library" hx-push-url="true">{{index . 2}}</a>
 {{end}}

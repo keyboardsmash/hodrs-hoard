@@ -502,11 +502,6 @@ func itemColumns(it *Item, mt *MediaType) ([]string, []any) {
 		cols = append(cols, col)
 		vals = append(vals, v)
 	}
-	people := make([]string, len(it.Credits))
-	for i, c := range it.Credits {
-		people[i] = c.Name
-	}
-
 	add("media_type_id", mt.ID)
 	add("parent_id", nullID(it.ParentID))
 	add("title", it.Title)
@@ -546,9 +541,81 @@ func itemColumns(it *Item, mt *MediaType) ([]string, []any) {
 	add("binding", nullText(it.Binding))
 	add("file_format", nullText(it.FileFormat))
 	add("file_path", nullText(it.FilePath))
-	add("search_text", searchText(it.Title, it.OriginalTitle, strings.Join(it.AltTitles, "\n"),
-		it.Series, strings.Join(people, "\n"), it.Notes))
+	text, private := searchColumns(it)
+	add("search_text", text)
+	add("search_private", private)
 	return cols, vals
+}
+
+// SearchVersion is the version of what searchColumns builds. Raise it
+// when that changes; the server then calls RebuildSearch at startup.
+const SearchVersion = 1
+
+// searchColumns builds the lowercased search texts (spec 5). Notes and the
+// borrower go in the private one, which only logged-in users search.
+func searchColumns(it *Item) (text, private string) {
+	people := make([]string, len(it.Credits))
+	for i, c := range it.Credits {
+		people[i] = c.Name
+	}
+	text = searchText(it.Title, it.OriginalTitle, strings.Join(it.AltTitles, "\n"),
+		it.Series, strings.Join(people, "\n"))
+	return text, searchText(it.Notes, it.LoanedTo)
+}
+
+// RebuildSearch recomputes the search texts of all items and returns how
+// many it updated.
+func (s *Store) RebuildSearch(ctx context.Context) (int, error) {
+	var ids []int64
+	err := eachRow(ctx, s.db, func(r *sql.Rows) error {
+		var id int64
+		err := r.Scan(&id)
+		ids = append(ids, id)
+		return err
+	}, `SELECT id FROM items ORDER BY id`)
+	if err != nil {
+		return 0, err
+	}
+	for _, id := range ids {
+		it, err := s.Get(ctx, id)
+		if err != nil {
+			return 0, err
+		}
+		text, private := searchColumns(it)
+		if _, err := s.db.ExecContext(ctx, `UPDATE items SET search_text = ?, search_private = ? WHERE id = ?`,
+			text, private, id); err != nil {
+			return 0, err
+		}
+	}
+	return len(ids), nil
+}
+
+// Flags that SetFlag can change.
+const (
+	FlagOwn       = "own"
+	FlagSeen      = "seen"
+	FlagFavourite = "favourite"
+)
+
+// SetFlag sets own, seen or favourite on one item, for the in-place
+// toggles in the library list.
+func (s *Store) SetFlag(ctx context.Context, userID, id int64, flag string, on bool) error {
+	switch flag {
+	case FlagOwn, FlagSeen, FlagFavourite: // the column name comes from this fixed list only
+	default:
+		return errors.New("unknown flag " + flag)
+	}
+	res, err := s.db.ExecContext(ctx, `UPDATE items SET `+flag+` = ?, updated_at = ?, updated_by = ? WHERE id = ?`,
+		on, s.now().Unix(), nullID(userID), id)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return err
+	} else if n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // saveLinks replaces the item's credits, genres, lists and identifiers.
