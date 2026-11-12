@@ -54,6 +54,12 @@
     .cover { aspect-ratio: 2 / 3; background: #eee; border-radius: .25rem; display: flex; flex-direction: column;
              align-items: center; justify-content: center; color: #666; margin-bottom: .35rem; }
     .cover span { font-size: 2.5rem; }
+    img.cover { display: block; width: 100%; object-fit: contain; }
+    td.thumb, th.thumb { width: 2rem; padding-right: 0; }
+    td.thumb img { display: block; height: 2.75rem; width: auto; max-width: 2.5rem; object-fit: contain; }
+    .item-cover { float: right; margin: 0 0 1rem 1.5rem; }
+    .item-cover img { display: block; width: 12rem; max-width: 40vw; height: auto; border-radius: .25rem; }
+    .form-cover { display: block; width: 8rem; height: auto; margin-bottom: .5rem; border-radius: .25rem; }
     .pager { display: flex; flex-wrap: wrap; gap: .75rem; margin: 1rem 0; }
     th a { color: inherit; }
     .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }

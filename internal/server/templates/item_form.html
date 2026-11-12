@@ -10,7 +10,9 @@
   {{end}}
   {{with .Error}}<p class="error">{{.}}{{range $.OtherErrors}}<br>{{.}}{{end}}</p>{{end}}
 
-  <form class="stacked" method="post" action="{{if .Item}}/items/{{.Item.ID}}/edit{{else}}/items/new{{end}}">
+  {{/* multipart/form-data: needed to send a file. */}}
+  <form class="stacked" method="post" enctype="multipart/form-data"
+        action="{{if .Item}}/items/{{.Item.ID}}/edit{{else}}/items/new{{end}}">
     <fieldset>
       <legend>Basics</legend>
       <div class="row">
@@ -67,6 +69,20 @@
       <label for="description">Description</label>
       <textarea id="description" name="description" rows="5">{{$f.Description}}</textarea>
       {{template "ferr" index $e "description"}}
+    </fieldset>
+
+    <fieldset>
+      <legend>Cover</legend>
+      {{/* The current cover, or one uploaded with an earlier try at this
+           form that had errors, so it needn't be chosen again. */}}
+      <input type="hidden" name="cover" value="{{$f.Cover}}">
+      {{with $f.Cover}}
+        <img class="form-cover" src="/covers/{{.}}-thumb.jpg" alt="Current cover">
+        <label class="check"><input type="checkbox" name="cover_remove"> Remove the cover</label>
+      {{end}}
+      <label for="cover_file">{{if $f.Cover}}Replace with{{else}}Image{{end}} <span class="hint">(JPEG or PNG, at most 15 MB)</span></label>
+      <input id="cover_file" name="cover_file" type="file" accept="image/jpeg,image/png">
+      {{template "ferr" index $e "cover"}}
     </fieldset>
 
     <fieldset>

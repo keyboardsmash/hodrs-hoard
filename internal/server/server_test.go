@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/keyboardsmash/hodrs-hoard/internal/auth"
+	"github.com/keyboardsmash/hodrs-hoard/internal/cover"
 	"github.com/keyboardsmash/hodrs-hoard/internal/db"
 	"github.com/keyboardsmash/hodrs-hoard/internal/user"
 )
@@ -39,7 +40,7 @@ func newApp(t *testing.T) *testApp {
 	t.Helper()
 	d := db.OpenTestMigrated(t)
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	s, err := New(context.Background(), "test", log, d)
+	s, err := New(context.Background(), "test", log, d, cover.NewStore(t.TempDir()))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -56,7 +57,7 @@ func newAppWithUser(t *testing.T, username string, role user.Role) *testApp {
 		t.Fatal(err)
 	}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	s, err := New(context.Background(), "test", log, d)
+	s, err := New(context.Background(), "test", log, d, cover.NewStore(t.TempDir()))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

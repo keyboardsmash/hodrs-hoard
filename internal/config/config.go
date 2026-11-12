@@ -19,11 +19,13 @@ type Config struct {
 	Addr string
 	// LogLevel controls log verbosity (debug, info, warn, error).
 	LogLevel slog.Level
-	// DataDir holds the SQLite database and, later, covers.
+	// DataDir holds the SQLite database and the covers.
 	DataDir string
 	// DatabasePath is the SQLite file inside DataDir. Not configurable on
 	// its own: keeping everything in one folder keeps backups simple.
 	DatabasePath string
+	// CoversDir is the covers folder inside DataDir (spec 3.5).
+	CoversDir string
 }
 
 // Defaults used when an environment variable is unset or empty.
@@ -34,6 +36,8 @@ const (
 	AppDirName = "hodrs-hoard"
 	// DatabaseFile is the SQLite file name inside the data folder.
 	DatabaseFile = "hoard.db"
+	// CoversFolder is the covers folder inside the data folder.
+	CoversFolder = "covers"
 )
 
 // Env is what Load needs from the environment. In production main passes
@@ -86,6 +90,7 @@ func Load(env Env) (Config, error) {
 	cfg.DataDir = abs
 
 	cfg.DatabasePath = filepath.Join(cfg.DataDir, DatabaseFile)
+	cfg.CoversDir = filepath.Join(cfg.DataDir, CoversFolder)
 
 	return cfg, nil
 }

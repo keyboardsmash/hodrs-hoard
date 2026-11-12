@@ -275,7 +275,7 @@ func TestSearchRebuiltAtStartup(t *testing.T) {
 	a.db.Exec(`UPDATE items SET search_text = 'alien signed', search_private = '' WHERE id = ?`, it.ID)
 	a.s.settings.SetInt(ctx, settings.SearchVersion, 0)
 
-	if _, err := New(ctx, "test", a.s.log, a.db); err != nil {
+	if _, err := New(ctx, "test", a.s.log, a.db, a.s.covers); err != nil {
 		t.Fatal(err)
 	}
 	if p, _ := a.s.items.List(ctx, item.Query{Search: "signed"}); p.Total != 0 {

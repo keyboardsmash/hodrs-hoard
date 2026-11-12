@@ -70,6 +70,7 @@ type Query struct {
 	Favourite  Flag
 	Loaned     Flag
 	TV         Flag
+	HasCover   Flag
 
 	Sort string // one of Sorts; "" means title
 	Desc bool
@@ -93,6 +94,7 @@ type Summary struct {
 	Loaned       bool
 	IsTV         bool
 	Incomplete   bool
+	Cover        string // hash, or ""
 	// Directors for video, authors for books; at most three.
 	People []string
 }
@@ -131,7 +133,7 @@ func (s *Store) List(ctx context.Context, q Query) (*Page, error) {
 		dir = "DESC"
 	}
 	query := `SELECT i.id, i.title, i.year, m.name, m.kind, i.series, i.series_number, i.runtime,
-	                 i.status, i.own, i.seen, i.favourite, i.loaned, i.is_tv, ` + incompleteSQL +
+	                 i.status, i.own, i.seen, i.favourite, i.loaned, i.is_tv, i.cover, ` + incompleteSQL +
 		from + ` ORDER BY ` + orderBy(order, dir) + ` LIMIT ? OFFSET ?`
 	args = append(args, PerPage, (p.Page-1)*PerPage)
 
@@ -141,14 +143,16 @@ func (s *Store) List(ctx context.Context, q Query) (*Page, error) {
 			sm                   Summary
 			year, runtime        sql.NullInt64
 			series, seriesNumber sql.NullString
+			coverHash            sql.NullString
 		)
 		if err := r.Scan(&sm.ID, &sm.Title, &year, &sm.MediaType, &sm.Kind, &series, &seriesNumber,
 			&runtime, &sm.Status, &sm.Own, &sm.Seen, &sm.Favourite, &sm.Loaned, &sm.IsTV,
-			&sm.Incomplete); err != nil {
+			&coverHash, &sm.Incomplete); err != nil {
 			return err
 		}
 		sm.Year, sm.Runtime = int(year.Int64), int(runtime.Int64)
 		sm.Series, sm.SeriesNumber = series.String, seriesNumber.String
+		sm.Cover = coverHash.String
 		p.Items = append(p.Items, sm)
 		return nil
 	}, query, args...)
@@ -235,6 +239,12 @@ func (q Query) where() (string, []any) {
 		case No:
 			add("i." + fl.col + " = 0")
 		}
+	}
+	switch q.HasCover {
+	case Yes:
+		add("i.cover IS NOT NULL")
+	case No:
+		add("i.cover IS NULL")
 	}
 	return strings.Join(conds, " AND "), args
 }

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/keyboardsmash/hodrs-hoard/internal/auth"
+	"github.com/keyboardsmash/hodrs-hoard/internal/cover"
 	"github.com/keyboardsmash/hodrs-hoard/internal/item"
 	"github.com/keyboardsmash/hodrs-hoard/internal/settings"
 	"github.com/keyboardsmash/hodrs-hoard/internal/user"
@@ -73,6 +74,7 @@ type Server struct {
 	remember  *auth.RememberTokens
 	settings  *settings.Store
 	items     *item.Store
+	covers    *cover.Store
 	templates map[string]*template.Template
 
 	// anonymous mirrors the anonymous browsing setting. It's read on every
@@ -90,7 +92,8 @@ type Server struct {
 
 // New parses the templates, checks whether first-run setup is needed and
 // returns a ready Server. If no users exist yet it logs the setup code.
-func New(ctx context.Context, version string, log *slog.Logger, db *sql.DB) (*Server, error) {
+// covers is where cover images live.
+func New(ctx context.Context, version string, log *slog.Logger, db *sql.DB, covers *cover.Store) (*Server, error) {
 	tmpl := make(map[string]*template.Template, len(pages))
 	for _, p := range pages {
 		// template.New("").Funcs(...) makes an empty template set that knows
@@ -112,6 +115,7 @@ func New(ctx context.Context, version string, log *slog.Logger, db *sql.DB) (*Se
 		remember:  auth.NewRememberTokens(db),
 		settings:  settings.NewStore(db),
 		items:     item.NewStore(db),
+		covers:    covers,
 		templates: tmpl,
 	}
 
@@ -174,6 +178,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /static/", staticHandler())
 	mux.Handle("GET /{$}", s.browse(s.handleLibrary))
 	mux.Handle("GET /items/{id}", s.browse(s.handleItem))
+	mux.Handle("GET /covers/{file}", s.browse(s.handleCover))
 
 	// Own account: any logged-in user.
 	viewer := func(h http.HandlerFunc) http.Handler { return s.requireRole(user.RoleViewer, h) }
@@ -236,25 +241,27 @@ func (s *Server) Handler() http.Handler {
 	return s.logRequests(h)
 }
 
-// CleanupSessions deletes expired sessions and remember tokens now and then
-// every hour, until ctx is cancelled. main runs it in its own goroutine.
-func (s *Server) CleanupSessions(ctx context.Context) {
+// Cleanup deletes expired sessions and remember tokens, and cover files no
+// item uses, now and then every hour, until ctx is cancelled. main runs it
+// in its own goroutine.
+func (s *Server) Cleanup(ctx context.Context) {
 	ticker := time.NewTicker(time.Hour)
 	defer ticker.Stop()
 	// A map from a name to a method value: s.sessions.DeleteExpired is a
 	// function already bound to s.sessions, so it can be called later.
 	cleanups := map[string]func(context.Context) (int64, error){
-		"sessions":        s.sessions.DeleteExpired,
-		"remember tokens": s.remember.DeleteExpired,
+		"expired sessions":        s.sessions.DeleteExpired,
+		"expired remember tokens": s.remember.DeleteExpired,
+		"unused covers":           s.sweepCovers,
 	}
 	for {
 		for what, cleanup := range cleanups {
 			if n, err := cleanup(ctx); err != nil {
 				if ctx.Err() == nil { // errors during shutdown are expected
-					s.log.Error("deleting expired "+what, "err", err)
+					s.log.Error("deleting "+what, "err", err)
 				}
 			} else if n > 0 {
-				s.log.Debug("deleted expired "+what, "count", n)
+				s.log.Debug("deleted "+what, "count", n)
 			}
 		}
 		select {

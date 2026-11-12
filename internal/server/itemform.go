@@ -44,6 +44,9 @@ type itemForm struct {
 
 	Publisher, Pages, Binding string
 	FileFormat, FilePath      string
+
+	// Cover is the hash of the cover the form carries (see readCover).
+	Cover string
 }
 
 // newItemForm is the empty form for a new item.
@@ -91,6 +94,7 @@ func itemFormFrom(it *item.Item) itemForm {
 		Binding:       it.Binding,
 		FileFormat:    it.FileFormat,
 		FilePath:      it.FilePath,
+		Cover:         it.Cover,
 	}
 	if it.AgeLimit != nil {
 		f.AgeLimit = strconv.Itoa(*it.AgeLimit)

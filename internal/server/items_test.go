@@ -34,6 +34,7 @@ func (a *testApp) addFullItem(mediaTypeID int64) *item.Item {
 			{Type: item.IDTmdb, Value: "603"}, {Type: item.IDIsbn, Value: "9780306406157"}},
 		Runtime: 120, Region: "2", VideoStandard: "PAL", IsTV: true, Seasons: "1-3", AudioFormat: "DD 5.1", VideoFormat: "16:9",
 		Publisher: "Pub", Pages: 300, Binding: "paperback", FileFormat: "epub", FilePath: "/books/x.epub",
+		Cover: strings.Repeat("ab", 32), // no file needed to render pages
 	})
 }
 

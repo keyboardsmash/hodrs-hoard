@@ -163,7 +163,7 @@ func TestAnonymousBrowsing(t *testing.T) {
 	wantRedirect(t, a.do("POST", "/admin/settings", url.Values{}), "/login")
 
 	// The setting survives a restart.
-	s2, err := New(context.Background(), "test", a.s.log, a.db)
+	s2, err := New(context.Background(), "test", a.s.log, a.db, a.s.covers)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -19,7 +19,7 @@ func (s *Store) Get(ctx context.Context, id int64) (*Item, error) {
 		sortTitle, original, alt, desc, notes, series, serNo sql.NullString
 		loanedTo, loanedOn, trailer, mpaa                    sql.NullString
 		region, standard, seasons, audio, video              sql.NullString
-		publisher, binding, fileFormat, filePath             sql.NullString
+		publisher, binding, fileFormat, filePath, coverHash  sql.NullString
 	)
 	err := s.db.QueryRowContext(ctx, `
 		SELECT id, media_type_id, parent_id, status, trashed_at,
@@ -27,7 +27,7 @@ func (s *Store) Get(ctx context.Context, id int64) (*Item, error) {
 		       own_rating, series, series_number,
 		       own, seen, favourite, loaned, loaned_to, loaned_on, trailer, mpaa, age_limit,
 		       runtime, region, video_standard, is_tv, seasons, audio_format, video_format,
-		       publisher, pages, binding, file_format, file_path,
+		       publisher, pages, binding, file_format, file_path, cover,
 		       added_at, updated_at, added_by, updated_by
 		FROM items WHERE id = ?`, id).Scan(
 		&it.ID, &it.MediaTypeID, &parent, &it.Status, &trashed,
@@ -35,7 +35,7 @@ func (s *Store) Get(ctx context.Context, id int64) (*Item, error) {
 		&rating, &series, &serNo,
 		&it.Own, &it.Seen, &it.Favourite, &it.Loaned, &loanedTo, &loanedOn, &trailer, &mpaa, &ageLimit,
 		&runtime, &region, &standard, &it.IsTV, &seasons, &audio, &video,
-		&publisher, &pages, &binding, &fileFormat, &filePath,
+		&publisher, &pages, &binding, &fileFormat, &filePath, &coverHash,
 		&added, &updated, &addedBy, &updatedBy)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -77,6 +77,7 @@ func (s *Store) Get(ctx context.Context, id int64) (*Item, error) {
 	it.Binding = binding.String
 	it.FileFormat = fileFormat.String
 	it.FilePath = filePath.String
+	it.Cover = coverHash.String
 	if trashed.Valid {
 		it.TrashedAt = time.Unix(trashed.Int64, 0)
 	}
@@ -215,6 +216,21 @@ func (s *Store) EmptyTrash(ctx context.Context) (int, error) {
 		return err
 	})
 	return int(n), err
+}
+
+// CoverHashes returns the covers that items use, whatever their status:
+// a trashed item keeps its cover until the trash is emptied.
+func (s *Store) CoverHashes(ctx context.Context) (map[string]bool, error) {
+	used := map[string]bool{}
+	err := eachRow(ctx, s.db, func(r *sql.Rows) error {
+		var h string
+		if err := r.Scan(&h); err != nil {
+			return err
+		}
+		used[h] = true
+		return nil
+	}, `SELECT DISTINCT cover FROM items WHERE cover IS NOT NULL`)
+	return used, err
 }
 
 // Duplicate is another item that shares an identifier with this one.

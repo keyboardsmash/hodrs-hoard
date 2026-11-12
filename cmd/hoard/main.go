@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/keyboardsmash/hodrs-hoard/internal/config"
+	"github.com/keyboardsmash/hodrs-hoard/internal/cover"
 	"github.com/keyboardsmash/hodrs-hoard/internal/db"
 	"github.com/keyboardsmash/hodrs-hoard/internal/server"
 )
@@ -61,7 +62,7 @@ func run() error {
 		return fmt.Errorf("migrating database: %w", err)
 	}
 
-	srv, err := server.New(startCtx, version, log, database)
+	srv, err := server.New(startCtx, version, log, database, cover.NewStore(cfg.CoversDir))
 	if err != nil {
 		return err
 	}
@@ -79,7 +80,7 @@ func run() error {
 
 	// `go` starts the cleanup loop in the background; it stops when ctx is
 	// cancelled at shutdown.
-	go srv.CleanupSessions(ctx)
+	go srv.Cleanup(ctx)
 
 	// Run the server in a goroutine (a lightweight thread) so this function
 	// can wait for either a server error or a shutdown signal.

@@ -110,7 +110,7 @@ func findType(types []*item.MediaType, id int64) *item.MediaType {
 }
 
 func (s *Server) handleItemCreate(w http.ResponseWriter, r *http.Request) {
-	if !parseForm(w, r) {
+	if !parseItemForm(w, r) {
 		return
 	}
 	id, _ := strconv.ParseInt(r.PostForm.Get("media_type"), 10, 64)
@@ -125,6 +125,10 @@ func (s *Server) handleItemCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	f := readItemForm(r, mt.Kind, identifierTypes(mt.Kind, nil))
 	it, errs := f.toItem()
+	if err := s.readCover(r, &f, it, "", errs); err != nil {
+		s.serverError(w, r, err)
+		return
+	}
 	if len(errs) == 0 {
 		var newID int64
 		if newID, err = s.items.Create(r.Context(), currentUser(r.Context()).ID, it); err == nil {
@@ -146,7 +150,7 @@ func (s *Server) handleItemEditForm(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleItemEdit(w http.ResponseWriter, r *http.Request) {
 	old := s.loadItem(w, r)
-	if old == nil || !parseForm(w, r) {
+	if old == nil || !parseItemForm(w, r) {
 		return
 	}
 	// The kind decides which fields the form has; it can't change, so read
@@ -156,7 +160,11 @@ func (s *Server) handleItemEdit(w http.ResponseWriter, r *http.Request) {
 	it, errs := f.toItem()
 	it.ID = old.ID
 	it.ParentID = old.ParentID // not on the form yet (spec 3.4)
-	var err error
+	err := s.readCover(r, &f, it, old.Cover, errs)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
 	if len(errs) == 0 {
 		if err = s.items.Update(r.Context(), currentUser(r.Context()).ID, it); err == nil {
 			http.Redirect(w, r, itemURL(it.ID)+"?msg=saved", http.StatusSeeOther)
@@ -196,7 +204,7 @@ func (s *Server) itemFormError(w http.ResponseWriter, r *http.Request, old *item
 // as an unknown credit role); the form lists them at the top.
 func otherErrors(errs item.FieldErrors, kind item.Kind, idTypes []string) []string {
 	shown := map[string]bool{}
-	for _, k := range []string{"media_type", "title", "sort_title", "original_title", "alt_titles", "year",
+	for _, k := range []string{"cover", "media_type", "title", "sort_title", "original_title", "alt_titles", "year",
 		"description", "notes", "own_rating", "series", "series_number", "loaned_to", "loaned_on",
 		"trailer", "mpaa", "age_limit", "genres", "languages", "countries"} {
 		shown[k] = true
@@ -298,5 +306,12 @@ func (s *Server) handleEmptyTrash(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.log.Info("trash emptied", "items", n, "by", currentUser(r.Context()).Username)
+	// Remove the covers only those items used. Failing here doesn't undo
+	// anything; the hourly cleanup tries again.
+	if files, err := s.sweepCovers(r.Context()); err != nil {
+		s.log.Error("deleting unused covers", "err", err)
+	} else if files > 0 {
+		s.log.Info("deleted unused covers", "files", files)
+	}
 	http.Redirect(w, r, "/trash?msg=trash-emptied", http.StatusSeeOther)
 }

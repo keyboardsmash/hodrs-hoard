@@ -6,6 +6,10 @@
     <p class="warning">This item is hidden. Only editors and admins can see it.</p>
   {{end}}
 
+  {{with $it.Cover}}
+    <a class="item-cover" href="/covers/{{.}}.jpg" title="Full size">
+      <img src="/covers/{{.}}-thumb.jpg" alt="Cover of {{$it.Title}}"></a>
+  {{end}}
   <h2>{{$it.Title}}{{with $it.Year}} ({{.}}){{end}}</h2>
   {{with $it.OriginalTitle}}{{if ne . $it.Title}}<p class="muted">{{.}}</p>{{end}}{{end}}
 

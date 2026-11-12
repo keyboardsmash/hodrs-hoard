@@ -53,6 +53,9 @@ func TestLoadValues(t *testing.T) {
 	if cfg.DataDir != "/data" {
 		t.Errorf("DataDir = %q, want /data", cfg.DataDir)
 	}
+	if cfg.CoversDir != "/data/covers" {
+		t.Errorf("CoversDir = %q", cfg.CoversDir)
+	}
 	if cfg.DatabasePath != "/data/hoard.db" {
 		t.Errorf("DatabasePath = %q, want /data/hoard.db", cfg.DatabasePath)
 	}

@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/keyboardsmash/hodrs-hoard/internal/cover"
 )
 
 // Kind groups media types and decides which fields apply (spec 3.1).
@@ -142,6 +144,9 @@ type Item struct {
 	Binding    string
 	FileFormat string
 	FilePath   string
+
+	// Cover is the hash of the cover image (see package cover), or "".
+	Cover string
 
 	// Filled in by Get, ignored by Create and Update.
 	MediaType *MediaType
@@ -329,6 +334,9 @@ func (s *Store) prepare(ctx context.Context, tx *sql.Tx, it *Item) (*MediaType, 
 // Checks that need the database (media type, parent) are not done here.
 func Clean(it *Item) FieldErrors {
 	errs := FieldErrors{}
+	if it.Cover != "" && !cover.ValidHash(it.Cover) {
+		errs["cover"] = "The cover is invalid; upload it again."
+	}
 	line := func(field string, p *string) {
 		*p = cleanText(*p)
 		if len(*p) > maxLine {
@@ -541,6 +549,7 @@ func itemColumns(it *Item, mt *MediaType) ([]string, []any) {
 	add("binding", nullText(it.Binding))
 	add("file_format", nullText(it.FileFormat))
 	add("file_path", nullText(it.FilePath))
+	add("cover", nullText(it.Cover))
 	text, private := searchColumns(it)
 	add("search_text", text)
 	add("search_private", private)

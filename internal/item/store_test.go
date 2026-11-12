@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -559,5 +561,58 @@ func TestSetFlag(t *testing.T) {
 	}
 	if err := s.SetFlag(ctx, 0, 999, FlagSeen, true); !errors.Is(err, ErrNotFound) {
 		t.Errorf("missing item: %v", err)
+	}
+}
+
+func TestCover(t *testing.T) {
+	s := newStore(t)
+	h1 := strings.Repeat("ab", 32)
+	h2 := strings.Repeat("cd", 32)
+	a := mustCreate(t, s, &Item{MediaTypeID: 1, Title: "Alien", Cover: h1})
+	b := mustCreate(t, s, &Item{MediaTypeID: 1, Title: "Brazil", Cover: h1}) // shared
+	c := mustCreate(t, s, &Item{MediaTypeID: 1, Title: "Casablanca"})
+	if got := mustGet(t, s, a).Cover; got != h1 {
+		t.Errorf("Cover = %q", got)
+	}
+
+	// Anything but a hash is refused, by Clean and by the database.
+	_, err := s.Create(ctx, 0, &Item{MediaTypeID: 1, Title: "X", Cover: "../../etc/passwd"})
+	if fieldErr(err, "cover") == "" {
+		t.Errorf("bad cover: err = %v", err)
+	}
+	if _, err := s.db.Exec(`UPDATE items SET cover = 'nope' WHERE id = ?`, c); err == nil {
+		t.Error("database accepted a bad cover")
+	}
+
+	// The filter, and the hash in list results.
+	p, err := s.List(ctx, Query{HasCover: Yes})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := titles(p); !slices.Equal(got, []string{"Alien", "Brazil"}) {
+		t.Errorf("with cover = %v", got)
+	}
+	if p.Items[0].Cover != h1 {
+		t.Errorf("Summary.Cover = %q", p.Items[0].Cover)
+	}
+	p, _ = s.List(ctx, Query{HasCover: No})
+	if got := titles(p); !slices.Equal(got, []string{"Casablanca"}) {
+		t.Errorf("without cover = %v", got)
+	}
+
+	// Covers in use: trashed items count until the trash is emptied.
+	it := mustGet(t, s, b)
+	it.Cover = h2
+	if err := s.Update(ctx, 0, it); err != nil {
+		t.Fatal(err)
+	}
+	s.SetStatus(ctx, 0, b, StatusTrashed)
+	used, err := s.CoverHashes(ctx)
+	if err != nil || len(used) != 2 || !used[h1] || !used[h2] {
+		t.Errorf("CoverHashes = %v, %v", used, err)
+	}
+	s.EmptyTrash(ctx)
+	if used, _ = s.CoverHashes(ctx); len(used) != 1 || !used[h1] {
+		t.Errorf("after emptying the trash: %v", used)
 	}
 }

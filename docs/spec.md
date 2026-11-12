@@ -305,7 +305,28 @@ Stored in a separate table: `(item_id, type, value)`.
 
 - Stored by content hash: `covers/ab/cd/<hash>.jpg`.
 - A thumbnail is generated on upload.
-- **Later:** maximum stored size, and whether to re-encode the original.
+- **Decided** (milestone 4):
+  - Uploads: JPEG and PNG only, at most 15 MB and 50 megapixels. No new
+    dependency: the scaler (area averaging, shrinking only) is our own.
+  - Every cover is re-encoded as JPEG (quality 90), scaled to fit
+    2000 px on the long edge. This strips EXIF (such as GPS positions);
+    the EXIF orientation is applied first, so phone photos stand upright.
+    Transparent PNG areas become white.
+  - The hash is the SHA-256 of the stored JPEG; items store it in
+    `items.cover`. The same picture is stored once, shared by items.
+  - Thumbnail: `<hash>-thumb.jpg` next to the cover, fitting 400×600.
+  - Served at `/covers/<hash>.jpg` and `/covers/<hash>-thumb.jpg` to
+    whoever may browse; cached by browsers for good (`private, immutable`).
+  - Uploaded on the add and edit forms, which can also remove the cover.
+    A form with errors keeps the uploaded cover, so the file needn't be
+    chosen again.
+  - Files no item uses (trashed items still count) are deleted when the
+    trash is emptied and by an hourly cleanup, once unused for an hour.
+  - Shown on the item page (linking to the full size), in the grid and as
+    a small thumbnail in the list. A "has cover" filter finds items
+    without one; a missing cover doesn't make an item incomplete.
+  - **Later:** fetching a cover from a URL (with metadata providers,
+    milestone 6).
 
 ### 3.6 Item lifecycle
 
@@ -349,12 +370,12 @@ Stored in a separate table: `(item_id, type, value)`.
 ## 5. Browsing and search
 
 - **Decided** (baseline for milestone 3, from PHP4DVD's search page):
-  - Views: a table list and a grid. Until covers exist (milestone 4) the
-    grid shows placeholders.
+  - Views: a table list and a grid. Items without a cover show a
+    placeholder in the grid.
   - Sorting: title (by sort title), year, date added, media type and
     series; ascending or descending.
   - Filters: media type, kind, genre, status, incomplete, and own, seen,
-    favourite, loaned.
+    favourite, loaned, has cover (milestone 4).
   - Free-text search across title, original title, alternative titles,
     people and notes,
     using simple `LIKE` matching. **Later:** SQLite full-text search
@@ -404,7 +425,7 @@ API keys come from configuration and are never committed.
   |-------------------|---------|----------------------------------------|
   | `HOARD_ADDR`      | `:8080` | Listen address, `host:port`            |
   | `HOARD_LOG_LEVEL` | `info`  | `debug`, `info`, `warn` or `error`     |
-  | `HOARD_DATA_DIR`  | per-user data folder, see below | Holds `hoard.db` (SQLite), later covers |
+  | `HOARD_DATA_DIR`  | per-user data folder, see below | Holds `hoard.db` (SQLite) and `covers/` |
 
 - Default data folder: `$XDG_DATA_HOME/hodrs-hoard` (usually
   `~/.local/share/hodrs-hoard`) on Linux, `~/Library/Application Support/hodrs-hoard`
@@ -453,7 +474,8 @@ API keys come from configuration and are never committed.
    - 3b. Media type page, item add/edit/view forms, hide/trash/restore,
      trash page.
    - 3c. Library page: list and grid views, filters, search, paging; htmx.
-4. Covers.
+4. Covers: upload on the item forms, re-encoding, thumbnails, serving,
+   cleanup of unused files (section 3.5).
 5. PHP4DVD importer.
 6. Metadata providers.
 7. Export, import and backup.
@@ -539,3 +561,7 @@ Draft; finalised with the importer milestone.
 | 2026-11-11 | Library default sort: title. |
 | 2026-11-11 | Notes and borrowers searchable by logged-in users only (separate search column). |
 | 2026-11-11 | htmx 2.0.4 (0BSD licence), `internal/server/static/htmx-2.0.4.min.js`, SHA-256 e209dda5c8235479f3166defc7750e1dbcd5a5c1808b7792fc2e6733768fb447, identical on unpkg and jsdelivr. |
+| 2026-11-12 | Covers: JPEG and PNG uploads only; own scaler, no `golang.org/x/image`. |
+| 2026-11-12 | Covers are always re-encoded as JPEG (strips EXIF, applies orientation); at most 15 MB / 50 MP in, 2000 px long edge stored, thumbnails 400×600. |
+| 2026-11-12 | Cover thumbnails in the list view too; "has cover" library filter. |
+| 2026-11-12 | Fetching covers from a URL deferred to milestone 6. |

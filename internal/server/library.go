@@ -37,6 +37,7 @@ type library struct {
 	// The filter form's current values, as the form uses them.
 	Search, Type, Kind, Genre, Status   string
 	Own, Seen, Favourite, Loaned, TV    string // "", "yes" or "no"
+	Cover                               string // likewise
 	Incomplete                          bool
 	Sort                                string
 	Desc                                bool
@@ -101,6 +102,7 @@ func parseLibrary(w http.ResponseWriter, r *http.Request) *library {
 		{"fav", &q.Favourite, &l.Favourite, true},
 		{"loaned", &q.Loaned, &l.Loaned, l.ShowLoaned},
 		{"tv", &q.TV, &l.TV, true},
+		{"cover", &q.HasCover, &l.Cover, true},
 	}
 	for _, f := range flags {
 		v := in.Get(f.key)

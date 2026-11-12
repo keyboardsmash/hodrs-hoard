@@ -38,6 +38,7 @@
     {{template "flag-select" (list "seen" $l.Seen "Seen or not" "Seen / read" "Not seen / read")}}
     {{template "flag-select" (list "fav" $l.Favourite "Favourite or not" "Favourites" "Not favourites")}}
     {{template "flag-select" (list "tv" $l.TV "Films and TV" "TV series" "Not TV series")}}
+    {{template "flag-select" (list "cover" $l.Cover "Covers or not" "With cover" "Without cover")}}
     {{if $l.ShowLoaned}}{{template "flag-select" (list "loaned" $l.Loaned "Loaned or not" "Loaned out" "Not loaned out")}}{{end}}
     {{if $l.ShowStatus}}
     <select name="status" aria-label="Status">
@@ -96,7 +97,8 @@
       {{range $p.Items}}
         <li>
           <a href="/items/{{.ID}}">
-            <div class="cover" aria-hidden="true"><span>{{initial .Title}}</span><small>{{.MediaType}}</small></div>
+            {{if .Cover}}<img class="cover" src="/covers/{{.Cover}}-thumb.jpg" alt="" loading="lazy">
+            {{else}}<div class="cover" aria-hidden="true"><span>{{initial .Title}}</span><small>{{.MediaType}}</small></div>{{end}}
             {{.Title}}</a>{{with .Year}} <span class="muted">{{.}}</span>{{end}}
           {{with .People}}<div class="muted">{{join . ", "}}</div>{{end}}
         </li>
@@ -105,6 +107,7 @@
     {{else}}
       <table class="library">
         <thead><tr>
+          <th class="thumb"><span class="visually-hidden">Cover</span></th>
           <th>{{template "sort-link" (list $l "title" "Title")}}</th>
           <th>{{template "sort-link" (list $l "year" "Year")}}</th>
           <th>{{template "sort-link" (list $l "media_type" "Type")}}</th>
@@ -115,6 +118,8 @@
         <tbody>
         {{range $p.Items}}
           <tr>
+            {{/* alt="": the title next to it says what the picture is. */}}
+            <td class="thumb">{{with .Cover}}<img src="/covers/{{.}}-thumb.jpg" alt="" loading="lazy">{{end}}</td>
             <td>
               <a href="/items/{{.ID}}">{{.Title}}</a>
               {{if .IsTV}}<span class="badge">TV</span>{{end}}
